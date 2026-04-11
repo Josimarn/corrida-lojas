@@ -24,7 +24,7 @@ export async function POST(req) {
     if (senha.length < 6) {
       return NextResponse.json({ error: 'Senha deve ter no mínimo 6 caracteres.' }, { status: 400 })
     }
-    const PERFIS_VALIDOS = ['dono', 'gerente', 'supervisor', 'vendedor']
+    const PERFIS_VALIDOS = ['super_admin', 'admin_cliente', 'dono', 'coordenador', 'gerente', 'supervisor', 'vendedor']
     if (!PERFIS_VALIDOS.includes(perfil)) {
       return NextResponse.json({ error: `Perfil "${perfil}" inválido.` }, { status: 400 })
     }
@@ -43,12 +43,8 @@ export async function POST(req) {
     const { data: caller } = await supaSession.from('usuarios')
       .select('perfil, empresa_id').eq('id', user.id).single()
 
-    if (!caller || caller.perfil !== 'dono') {
+    if (!caller || caller.perfil !== 'super_admin') {
       return NextResponse.json({ error: 'Acesso negado. Requer perfil super-admin.' }, { status: 403 })
-    }
-    // Super-admin é o dono SEM empresa vinculada
-    if (caller.empresa_id) {
-      return NextResponse.json({ error: 'Acesso negado. Endpoint exclusivo do super-admin.' }, { status: 403 })
     }
 
     // ── Cria no Auth com service role ────────────────────────

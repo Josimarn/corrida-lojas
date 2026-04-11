@@ -23,6 +23,7 @@ export default function DashboardPage() {
         super_admin:   '/super-admin',
         admin_cliente: '/admin',
         dono:          '/dono',
+        coordenador:   '/supervisor',
         supervisor:    '/supervisor',
         gerente:       '/gerente',
         vendedor:      '/vendedor',
