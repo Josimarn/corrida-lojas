@@ -1,0 +1,35 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * { box-sizing: border-box; }
+  body { @apply bg-stone-100 text-stone-900 font-sans antialiased; }
+  input, select, textarea {
+    @apply text-stone-900 bg-white border border-stone-300 rounded-lg px-3 py-2 text-sm w-full outline-none transition-colors;
+  }
+  input:focus, select:focus, textarea:focus {
+    @apply border-blue-500 ring-2 ring-blue-100;
+  }
+  button { @apply font-sans cursor-pointer transition-all duration-150; }
+}
+
+@layer components {
+  .card { @apply bg-white rounded-xl border border-stone-200 shadow-sm; }
+  .btn { @apply inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border transition-all duration-150 active:scale-95; }
+  .btn-primary { @apply btn bg-stone-900 text-white border-stone-900 hover:bg-stone-700; }
+  .btn-secondary { @apply btn bg-white text-stone-700 border-stone-300 hover:bg-stone-50; }
+  .btn-success { @apply btn bg-green-50 text-green-800 border-green-200 hover:bg-green-100; }
+  .btn-warning { @apply btn bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100; }
+  .btn-danger { @apply btn bg-red-50 text-red-800 border-red-200 hover:bg-red-100; }
+  .btn-info { @apply btn bg-blue-50 text-blue-800 border-blue-200 hover:bg-blue-100; }
+  .badge { @apply inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold border; }
+  .badge-green  { @apply badge bg-green-50 text-green-800 border-green-200; }
+  .badge-amber  { @apply badge bg-amber-50 text-amber-800 border-amber-200; }
+  .badge-blue   { @apply badge bg-blue-50 text-blue-800 border-blue-200; }
+  .badge-purple { @apply badge bg-purple-50 text-purple-800 border-purple-200; }
+  .badge-gray   { @apply badge bg-stone-100 text-stone-700 border-stone-200; }
+  .label-field { @apply block text-xs font-medium text-stone-500 mb-1; }
+  .section-title { @apply text-xs font-bold text-stone-400 uppercase tracking-widest mb-3; }
+}

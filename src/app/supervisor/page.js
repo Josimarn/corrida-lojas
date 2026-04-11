@@ -1,0 +1,569 @@
+'use client'
+import { useState, useEffect, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
+import { createClient } from '@/lib/supabase-browser'
+import NavBar from '@/components/NavBar'
+import RaceTrack from '@/components/RaceTrack'
+import ScoreCard from '@/components/ScoreCard'
+import {
+  getWeeksOfMonth, getMonthDateKeys, toDateKey, calcScore, aggregateLancamentos,
+  fmtR, fmtPct, MESES, MEDALS, getCor
+} from '@/lib/helpers'
+
+function LojaCard({ loja, dados, index }) {
+  const c = getCor(index)
+  const lcs    = dados.lancamentos || []
+  const meta   = dados.metaLoja
+  const st     = aggregateLancamentos(lcs)
+  const pv = meta?.meta_total > 0 ? (st.vendas / meta.meta_total) * 100 : 0
+  const score = Math.round(pv * 10) / 10
+  const atingiu = score >= 100
+
+  function MetricBar({ label, pct, value, metaVal, color }) {
+    return (
+      <div className="space-y-1">
+        <div className="flex justify-between text-xs">
+          <span className="text-stone-400">{label}</span>
+          <span className="font-semibold text-stone-700">{fmtPct(pct)}</span>
+        </div>
+        <div className="h-1.5 bg-stone-100 rounded-full overflow-hidden">
+          <div className="h-full rounded-full transition-all duration-500"
+            style={{ width: `${Math.min(pct, 100)}%`, background: color }} />
+        </div>
+        <div className="text-xs text-stone-400">{value} / {metaVal}</div>
+      </div>
+    )
+  }
+
+  return (
+    <div className={`card p-4 ${atingiu ? 'ring-2 ring-green-300' : ''}`}>
+      <div className="flex items-center gap-2.5 mb-3">
+        <div className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0"
+          style={{ background: c.bg, color: c.border }}>
+          {loja.nome.split(' ').map(w => w[0]).join('').slice(0, 2)}
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="font-semibold text-sm text-stone-900 truncate">{loja.nome}</p>
+          {loja.cidade && <p className="text-xs text-stone-400">{loja.cidade}</p>}
+          {atingiu && <span className="text-xs font-bold text-green-600">Meta atingida! 🏆</span>}
+        </div>
+        <div className="ml-auto text-right">
+          <p className="text-xl font-extrabold" style={{ color: c.border }}>{fmtPct(score)}</p>
+          <p className="text-xs text-stone-400">score</p>
+        </div>
+      </div>
+
+      <div className="space-y-3">
+        <MetricBar label="Venda"
+          pct={pv} value={fmtR(st.vendas)} metaVal={fmtR(meta?.meta_total || 0)} color={c.fill} />
+      </div>
+
+      <div className="grid grid-cols-3 gap-1.5 mt-3 pt-3 border-t border-stone-100">
+        <div className="text-center">
+          <p className="text-xs text-stone-400">Atend.</p>
+          <p className="text-sm font-bold text-stone-800">{st.atendimentos}</p>
+        </div>
+        <div className="text-center">
+          <p className="text-xs text-stone-400">Peças</p>
+          <p className="text-sm font-bold text-stone-800">{st.pecas}</p>
+        </div>
+        <div className="text-center">
+          <p className="text-xs text-stone-400">Ticket</p>
+          <p className="text-sm font-bold text-stone-800">{fmtR(st.ticket)}</p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+const TODAY = new Date()
+
+export default function SupervisorPage() {
+  const router   = useRouter()
+  const supabase = createClient()
+  const [usuario,  setUsuario]  = useState(null)
+  const [lojas,    setLojas]    = useState([])
+  const [lojaData, setLojaData] = useState({})
+  const [selLoja,  setSelLoja]  = useState(null)
+  const [visao,    setVisao]    = useState('lojas') // 'lojas' | 'vendedores' | 'diaria' | 'anual'
+  const [loading,  setLoading]  = useState(true)
+  const [vY, setVY] = useState(TODAY.getFullYear())
+  const [vM, setVM] = useState(TODAY.getMonth())
+  const [semanas,  setSemanas]  = useState([])
+  const [selD,     setSelD]     = useState(toDateKey(TODAY))
+  const [anossel,  setAnosSel]  = useState([TODAY.getFullYear()])
+  const [dadosAnual, setDadosAnual] = useState({})
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) { router.replace('/'); return }
+    const { data: u } = await supabase.from('usuarios').select('*').eq('id', user.id).single()
+    setUsuario(u)
+
+    const { data: ls } = await supabase.from('loja_supervisores')
+      .select('loja_id, lojas(*)').eq('usuario_id', user.id)
+    const minhasLojas = (ls || []).map(r => r.lojas).filter(Boolean)
+    setLojas(minhasLojas)
+    if (minhasLojas.length > 0 && !selLoja) setSelLoja(minhasLojas[0].id)
+
+    const monthKeys = getMonthDateKeys(vY, vM)
+    const dados = {}
+
+    for (const loja of minhasLojas) {
+      const { data: vs }  = await supabase.from('vendedores').select('*').eq('loja_id', loja.id).eq('ativo', true).order('nome')
+      const { data: ml }  = await supabase.from('metas_loja').select('*').eq('loja_id', loja.id).eq('ano', vY).eq('mes', vM + 1).maybeSingle()
+      const { data: lcs } = await supabase.from('lancamentos').select('*').eq('loja_id', loja.id).in('data', monthKeys)
+      const { data: mvs } = await supabase.from('metas_vendedor').select('*').eq('loja_id', loja.id).eq('ano', vY).eq('mes', vM + 1).is('semana', null)
+      const pesos = { peso_venda: ml?.peso_venda || 40, peso_ticket: ml?.peso_ticket || 30, peso_pa: ml?.peso_pa || 30 }
+      const scores = {}
+      ;(vs || []).forEach(v => {
+        const st   = aggregateLancamentos((lcs || []).filter(l => l.vendedor_id === v.id))
+        const mv   = (mvs || []).find(m => m.vendedor_id === v.id) || {}
+        const meta = { meta_venda: mv.meta_venda || 0, meta_ticket: mv.meta_ticket || 0, meta_pa: mv.meta_pa || 0 }
+        scores[v.id] = { ...calcScore(st, meta, pesos), stats: st, pesos }
+      })
+      dados[loja.id] = { vendedores: vs || [], scores, metaLoja: ml, metasVendedor: mvs || [], lancamentos: lcs || [] }
+    }
+    setLojaData(dados)
+    setLoading(false)
+  }, [router, vY, vM])
+
+  useEffect(() => { load() }, [load])
+
+  useEffect(() => {
+    const wks = getWeeksOfMonth(vY, vM)
+    setSemanas(wks)
+  }, [vY, vM])
+
+  const loadAnual = useCallback(async (anos, lojaIds) => {
+    if (!lojaIds?.length) return
+    const resultado = {}
+    for (const ano of anos) {
+      resultado[ano] = {}
+      for (let mes = 1; mes <= 12; mes++) {
+        const keys = getMonthDateKeys(ano, mes - 1)
+        const porLoja = {}
+        for (const lojaId of lojaIds) {
+          const { data: lcs } = await supabase.from('lancamentos').select('vendas').eq('loja_id', lojaId).in('data', keys)
+          const { data: ml }  = await supabase.from('metas_loja').select('meta_total').eq('loja_id', lojaId).eq('ano', ano).eq('mes', mes).maybeSingle()
+          porLoja[lojaId] = { vendas: (lcs || []).reduce((s, l) => s + (l.vendas || 0), 0), meta: ml?.meta_total || 0 }
+        }
+        const totalVendas = Object.values(porLoja).reduce((s, d) => s + d.vendas, 0)
+        const totalMeta   = Object.values(porLoja).reduce((s, d) => s + d.meta, 0)
+        resultado[ano][mes] = { vendas: totalVendas, meta: totalMeta, porLoja }
+      }
+    }
+    setDadosAnual(resultado)
+  }, [supabase])
+
+  useEffect(() => {
+    if (visao === 'anual' && lojas.length > 0) loadAnual(anossel, lojas.map(l => l.id))
+  }, [visao, anossel, lojas, loadAnual])
+
+  function changeMonth(d) {
+    let nm = vM + d, ny = vY
+    if (nm > 11) { nm = 0; ny++ }
+    if (nm < 0)  { nm = 11; ny-- }
+    setVM(nm); setVY(ny)
+  }
+
+  // KPIs consolidados
+  const kpiTotal = lojas.reduce((acc, loja) => {
+    const d = lojaData[loja.id] || { lancamentos: [], vendedores: [] }
+    acc.vendas     += d.lancamentos.reduce((s, l) => s + (l.vendas || 0), 0)
+    acc.vendedores += d.vendedores.length
+    return acc
+  }, { vendas: 0, vendedores: 0 })
+
+  // Score por loja (para a pista de lojas)
+  const lojasParaPista = lojas.map(l => ({ id: l.id, nome: l.nome, foto_url: null }))
+  const scoresLojas = {}
+  lojas.forEach(loja => {
+    const d = lojaData[loja.id] || { lancamentos: [], metaLoja: null }
+    const totalVendas = d.lancamentos.reduce((s, l) => s + (l.vendas || 0), 0)
+    const meta = d.metaLoja?.meta_total || 0
+    const score = meta > 0 ? Math.round((totalVendas / meta) * 1000) / 10 : 0
+    scoresLojas[loja.id] = { score }
+  })
+
+  const dadosLojaSel = lojaData[selLoja] || { vendedores: [], scores: {}, metaLoja: null, metasVendedor: [] }
+  const todayKey = toDateKey(TODAY)
+
+  if (loading) return (
+    <div className="min-h-screen flex items-center justify-center">
+      <div className="text-stone-400 text-sm">Carregando...</div>
+    </div>
+  )
+
+  return (
+    <div className="min-h-screen bg-stone-100">
+      <NavBar usuario={usuario} titulo="Coordenador Regional" subtitulo={`${lojas.length} loja${lojas.length !== 1 ? 's' : ''} supervisionada${lojas.length !== 1 ? 's' : ''}`} />
+
+      <main className="max-w-6xl mx-auto px-4 py-5 space-y-5">
+
+        {/* KPIs */}
+        <div className="grid grid-cols-3 gap-3">
+          {[
+            ['Vendas no Mês', fmtR(kpiTotal.vendas), 'todas as lojas'],
+            ['Lojas',         lojas.length,           'supervisionadas'],
+            ['Vendedores',    kpiTotal.vendedores,     'ativos'],
+          ].map(([l, v, s]) => (
+            <div key={l} className="card p-4 text-center">
+              <p className="text-xs text-stone-400">{l}</p>
+              <p className="text-xl font-extrabold text-stone-900 mt-0.5">{v}</p>
+              <p className="text-xs text-stone-400">{s}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* Nav mês + toggle de visão */}
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          {visao !== 'anual' && (
+            <div className="flex items-center gap-3">
+              <button onClick={() => changeMonth(-1)} className="btn-secondary px-3 py-2 text-lg">‹</button>
+              <h2 className="text-lg font-bold text-stone-900">{MESES[vM]} {vY}</h2>
+              <button onClick={() => changeMonth(1)}  className="btn-secondary px-3 py-2 text-lg">›</button>
+            </div>
+          )}
+
+          {/* Toggle */}
+          <div className="flex gap-2 flex-wrap">
+            {[
+              ['lojas',      '🏪 Corrida das Lojas'],
+              ['vendedores', '👤 Vendedores por Loja'],
+              ['diaria',     '🏁 Diária'],
+              ['anual',      '📊 Anual'],
+            ].map(([v, label]) => (
+              <button key={v} onClick={() => setVisao(v)}
+                className={`px-4 py-1.5 rounded-lg text-sm border transition-all ${visao === v ? 'bg-stone-900 text-white border-stone-900' : 'bg-white text-stone-600 border-stone-200 hover:bg-stone-50'}`}>
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* ── VISÃO: CORRIDA DAS LOJAS ── */}
+        {visao === 'lojas' && (
+          <>
+            <div className="card p-4">
+              <p className="section-title mb-4">Pista das Lojas — {MESES[vM]} {vY}</p>
+              <RaceTrack vendedores={lojasParaPista} scores={scoresLojas} semanas={4} />
+            </div>
+
+            <div>
+              <p className="section-title">Desempenho das Lojas</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 mt-3">
+                {lojas.map((loja, i) => (
+                  <LojaCard key={loja.id} loja={loja} dados={lojaData[loja.id] || { lancamentos: [], metaLoja: null }} index={i} />
+                ))}
+              </div>
+            </div>
+
+            <div className="card p-4">
+              <p className="section-title">Classificação das Lojas</p>
+              <div className="space-y-2 mt-3">
+                {[...lojas]
+                  .map((loja, i) => {
+                    const d     = lojaData[loja.id] || { lancamentos: [] }
+                    const total = d.lancamentos.reduce((s, l) => s + (l.vendas || 0), 0)
+                    const meta  = d.metaLoja?.meta_total || 0
+                    const score = meta > 0 ? Math.round(total / meta * 1000) / 10 : 0
+                    return { loja, i, total, score }
+                  })
+                  .sort((a, b) => b.score - a.score)
+                  .map(({ loja, i, total, score }, r) => {
+                    const c = getCor(i)
+                    return (
+                      <div key={loja.id} className="flex items-center gap-3 py-2 border-b border-stone-100 last:border-0">
+                        <span className="text-lg min-w-[24px]">{MEDALS[r] || `${r + 1}º`}</span>
+                        <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
+                          style={{ background: c.bg, color: c.border }}>
+                          {loja.nome.split(' ').map(w => w[0]).join('').slice(0, 2)}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-stone-900 truncate">{loja.nome}</p>
+                          {loja.cidade && <p className="text-xs text-stone-400">{loja.cidade}</p>}
+                        </div>
+                        <div className="text-right">
+                          <p className="text-base font-extrabold" style={{ color: c.border }}>{score.toFixed(1)}%</p>
+                          <p className="text-xs text-stone-400">{fmtR(total)}</p>
+                        </div>
+                      </div>
+                    )
+                  })}
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* ── VISÃO: VENDEDORES POR LOJA ── */}
+        {visao === 'vendedores' && (
+          <>
+            <div className="flex flex-wrap gap-2">
+              {lojas.map(l => (
+                <button key={l.id} onClick={() => setSelLoja(l.id)}
+                  className={`px-3 py-1.5 rounded-lg text-sm border transition-all ${l.id === selLoja ? 'bg-stone-900 text-white border-stone-900' : 'bg-white text-stone-600 border-stone-200 hover:bg-stone-50'}`}>
+                  {l.nome}
+                  {l.cidade && <span className="text-xs opacity-60 ml-1">{l.cidade}</span>}
+                </button>
+              ))}
+            </div>
+
+            {selLoja && (
+              <>
+                <div className="card p-4">
+                  <div className="flex items-center justify-between mb-4">
+                    <p className="section-title">{lojas.find(l => l.id === selLoja)?.nome} — Pista do Mês</p>
+                    <span className="text-xs text-stone-400">
+                      Meta: {dadosLojaSel.metaLoja ? fmtR(dadosLojaSel.metaLoja.meta_total) : '—'}
+                    </span>
+                  </div>
+                  <RaceTrack vendedores={dadosLojaSel.vendedores} scores={dadosLojaSel.scores} semanas={4} />
+                </div>
+
+                <div>
+                  <p className="section-title">Desempenho dos Vendedores</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 mt-3">
+                    {dadosLojaSel.vendedores.map((v, i) => {
+                      const mv = dadosLojaSel.metasVendedor.find(m => m.vendedor_id === v.id) || {}
+                      return (
+                        <ScoreCard key={v.id}
+                          vendedor={{ ...v, meta: { meta_venda: mv.meta_venda || 0, meta_ticket: mv.meta_ticket || 0, meta_pa: mv.meta_pa || 0 } }}
+                          stats={dadosLojaSel.scores[v.id]?.stats}
+                          scored={dadosLojaSel.scores[v.id]}
+                          index={i} />
+                      )
+                    })}
+                  </div>
+                </div>
+
+                <div className="card p-4">
+                  <p className="section-title">Classificação</p>
+                  <div className="space-y-2 mt-3">
+                    {[...dadosLojaSel.vendedores]
+                      .map((v, i) => ({ v, i, score: dadosLojaSel.scores[v.id]?.score || 0 }))
+                      .sort((a, b) => b.score - a.score)
+                      .map(({ v, i, score }, r) => {
+                        const c = getCor(i)
+                        return (
+                          <div key={v.id} className="flex items-center gap-3 py-2 border-b border-stone-100 last:border-0">
+                            <span className="text-lg min-w-[24px]">{MEDALS[r] || `${r + 1}º`}</span>
+                            <div className="flex-1 text-sm font-semibold text-stone-900">{v.nome}</div>
+                            <div className="text-base font-extrabold" style={{ color: c.border }}>{score.toFixed(1)}%</div>
+                          </div>
+                        )
+                      })}
+                  </div>
+                </div>
+              </>
+            )}
+          </>
+        )}
+
+        {/* ── VISÃO: CORRIDA DIÁRIA ── */}
+        {visao === 'diaria' && (() => {
+          // Score de cada loja no dia selecionado
+          const scoresLojasDia = {}
+          lojas.forEach(loja => {
+            const d   = lojaData[loja.id] || { lancamentos: [], metaLoja: null }
+            const lcs = (d.lancamentos || []).filter(l => l.data === selD)
+            const totalDia = lcs.reduce((s, l) => s + (l.vendas || 0), 0)
+            // Meta diária estimada: meta mensal / 26 dias úteis
+            const metaDia = (d.metaLoja?.meta_total || 0) / 26
+            const score = metaDia > 0 ? Math.round(totalDia / metaDia * 1000) / 10 : 0
+            scoresLojasDia[loja.id] = { score, vendas: totalDia }
+          })
+
+          const selObjDia = semanas.flat().find(d => d.key === selD)
+
+          return (
+            <>
+              {/* Seletor de dia */}
+              <div className="flex flex-wrap gap-2">
+                {semanas.flat().filter(d => d.inMonth).map(d => {
+                  const isT = d.key === todayKey
+                  const has = lojas.some(loja => (lojaData[loja.id]?.lancamentos || []).some(l => l.data === d.key))
+                  const act = d.key === selD
+                  return (
+                    <button key={d.key} onClick={() => setSelD(d.key)}
+                      className={`relative px-3 py-1.5 rounded-lg text-sm border transition-all ${act ? 'bg-stone-900 text-white border-stone-900' : 'bg-white text-stone-600 border-stone-200 hover:bg-stone-50'}`}>
+                      {String(d.date.getDate()).padStart(2,'0')}/{String(vM+1).padStart(2,'0')}
+                      {isT && <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-blue-500" />}
+                      {has && !isT && <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-green-500" />}
+                    </button>
+                  )
+                })}
+              </div>
+
+              <div className="card p-4">
+                <p className="section-title mb-4">
+                  Pista do Dia — {selObjDia ? `${selObjDia.lbl}, ${String(selObjDia.date.getDate()).padStart(2,'0')}/${String(vM+1).padStart(2,'0')}/${vY}` : selD}
+                </p>
+                <RaceTrack vendedores={lojasParaPista} scores={scoresLojasDia} semanas={0} />
+              </div>
+
+              <div>
+                <p className="section-title">Vendas do Dia por Loja</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 mt-3">
+                  {[...lojas]
+                    .map((loja, i) => ({ loja, i, sc: scoresLojasDia[loja.id] || { score: 0, vendas: 0 } }))
+                    .sort((a, b) => b.sc.score - a.sc.score)
+                    .map(({ loja, i, sc }, r) => {
+                      const c   = getCor(i)
+                      const d   = lojaData[loja.id] || { lancamentos: [] }
+                      const lcs = (d.lancamentos || []).filter(l => l.data === selD)
+                      const st  = aggregateLancamentos(lcs)
+                      return (
+                        <div key={loja.id} className="card p-4">
+                          <div className="flex items-center gap-2.5 mb-3">
+                            <div className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0"
+                              style={{ background: c.bg, color: c.border }}>
+                              {loja.nome.split(' ').map(w => w[0]).join('').slice(0, 2)}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="font-semibold text-sm text-stone-900 truncate">{loja.nome}</p>
+                              {loja.cidade && <p className="text-xs text-stone-400">{loja.cidade}</p>}
+                            </div>
+                            <span className="text-base font-extrabold" style={{ color: c.border }}>{MEDALS[r] || `${r+1}º`}</span>
+                          </div>
+                          {st.atendimentos > 0 || st.vendas > 0 ? (
+                            <div className="space-y-1 mb-2">
+                              <div className="flex justify-between text-xs"><span className="text-stone-400">Vendas</span><span className="font-bold">{fmtR(st.vendas)}</span></div>
+                              <div className="flex justify-between text-xs"><span className="text-stone-400">Atend.</span><span className="font-bold">{st.atendimentos}</span></div>
+                              <div className="flex justify-between text-xs"><span className="text-stone-400">Peças</span><span className="font-bold">{st.pecas}</span></div>
+                            </div>
+                          ) : <p className="text-xs text-stone-400 mb-2">Sem lançamento.</p>}
+                          <p className="text-xs font-bold text-right" style={{ color: c.border }}>{fmtPct(sc.score)}</p>
+                        </div>
+                      )
+                    })}
+                </div>
+              </div>
+            </>
+          )
+        })()}
+
+        {/* ── VISÃO: EVOLUÇÃO ANUAL ── */}
+        {visao === 'anual' && (() => {
+          const anosDisponiveis = [TODAY.getFullYear(), TODAY.getFullYear() - 1, TODAY.getFullYear() - 2]
+          const coresAnos = ['#2979FF', '#FF3D6B', '#00E096']
+          function toggleAno(ano) {
+            setAnosSel(prev => prev.includes(ano)
+              ? prev.length > 1 ? prev.filter(a => a !== ano) : prev
+              : [...prev, ano].sort((a, b) => a - b))
+          }
+          return (
+            <>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs text-stone-400 font-medium">Comparar anos:</span>
+                {anosDisponiveis.map((ano, ai) => (
+                  <button key={ano} onClick={() => toggleAno(ano)}
+                    className={`px-4 py-1.5 rounded-lg text-sm border font-semibold transition-all ${anossel.includes(ano) ? 'text-white' : 'bg-white text-stone-500 border-stone-200'}`}
+                    style={anossel.includes(ano) ? { background: coresAnos[ai], borderColor: coresAnos[ai] } : {}}>
+                    {ano}
+                  </button>
+                ))}
+              </div>
+
+              <div className="card p-4">
+                <p className="section-title mb-4">Vendas por Mês — {anossel.join(' vs ')}</p>
+                <div className="space-y-4">
+                  {MESES.map((nomeMes, mi) => {
+                    const mes = mi + 1
+                    const isCur = anossel.includes(TODAY.getFullYear()) && mi === TODAY.getMonth()
+                    const allFut = anossel.every(a => a === TODAY.getFullYear() && mi > TODAY.getMonth())
+                    return (
+                      <div key={mes} className={allFut ? 'opacity-30' : ''}>
+                        <div className="flex items-center justify-between text-xs mb-1.5">
+                          <span className={`font-medium w-20 ${isCur ? 'text-blue-600 font-bold' : 'text-stone-600'}`}>{nomeMes}{isCur && ' ●'}</span>
+                          <div className="flex gap-3 flex-wrap justify-end">
+                            {anossel.map((ano) => {
+                              const d = dadosAnual[ano]?.[mes] || { vendas: 0, meta: 0 }
+                              const pct = d.meta > 0 ? Math.min(d.vendas / d.meta * 100, 100) : 0
+                              return (
+                                <span key={ano} className="text-xs font-bold" style={{ color: coresAnos[anosDisponiveis.indexOf(ano)] }}>
+                                  {ano}: {fmtR(d.vendas)}{d.meta > 0 && ` (${fmtPct(pct)})`}
+                                </span>
+                              )
+                            })}
+                          </div>
+                        </div>
+                        <div className="space-y-1">
+                          {anossel.map((ano) => {
+                            const d = dadosAnual[ano]?.[mes] || { vendas: 0, meta: 0 }
+                            const pct = d.meta > 0 ? Math.min(d.vendas / d.meta * 100, 100) : 0
+                            return (
+                              <div key={ano} className="h-2.5 bg-stone-100 rounded-full overflow-hidden">
+                                <div className="h-full rounded-full transition-all duration-700"
+                                  style={{ width: `${pct}%`, background: coresAnos[anosDisponiveis.indexOf(ano)] }} />
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+
+              <div className="card p-4">
+                <p className="section-title mb-4">Atingimento por Loja e Mês</p>
+                {anossel.map((ano) => {
+                  const cor = coresAnos[anosDisponiveis.indexOf(ano)]
+                  const totalAno = lojas.reduce((s, loja) => s + Object.values(dadosAnual[ano] || {}).reduce((ss, m) => ss + (m.porLoja?.[loja.id]?.vendas || 0), 0), 0)
+                  return (
+                    <div key={ano} className="mb-5 last:mb-0">
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="w-3 h-3 rounded-full" style={{ background: cor }} />
+                        <p className="text-sm font-bold" style={{ color: cor }}>{ano} — Total: {fmtR(totalAno)}</p>
+                      </div>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-xs">
+                          <thead>
+                            <tr className="text-left text-stone-400 border-b border-stone-100">
+                              <th className="pb-1.5 pr-4 font-medium">Loja</th>
+                              {MESES.map((m, i) => <th key={i} className="pb-1.5 text-center px-1 font-medium">{m.slice(0,3)}</th>)}
+                              <th className="pb-1.5 text-right pl-2 font-medium">Total</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {lojas.map((loja, li) => {
+                              const c = getCor(li)
+                              const totalL = Object.values(dadosAnual[ano] || {}).reduce((s, m) => s + (m.porLoja?.[loja.id]?.vendas || 0), 0)
+                              return (
+                                <tr key={loja.id} className="border-b border-stone-50 last:border-0">
+                                  <td className="py-1.5 pr-4 font-semibold truncate max-w-[80px]" style={{ color: c.border }}>{loja.nome.split(' ')[0]}</td>
+                                  {MESES.map((_, mi) => {
+                                    const mes = mi + 1
+                                    const vv  = dadosAnual[ano]?.[mes]?.porLoja?.[loja.id]?.vendas || 0
+                                    const mm  = dadosAnual[ano]?.[mes]?.porLoja?.[loja.id]?.meta || 0
+                                    const p   = mm > 0 ? vv / mm * 100 : 0
+                                    const fut = ano === TODAY.getFullYear() && mi > TODAY.getMonth()
+                                    return (
+                                      <td key={mi} className={`py-1.5 text-center px-1 ${fut ? 'text-stone-200' : ''}`}>
+                                        {vv > 0
+                                          ? <span className={`font-bold ${p >= 100 ? 'text-green-600' : p >= 80 ? 'text-amber-600' : 'text-stone-600'}`}>{fmtPct(p)}</span>
+                                          : <span className="text-stone-300">—</span>}
+                                      </td>
+                                    )
+                                  })}
+                                  <td className="py-1.5 text-right pl-2 font-bold text-stone-800">{fmtR(totalL)}</td>
+                                </tr>
+                              )
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </>
+          )
+        })()}
+
+      </main>
+    </div>
+  )
+}

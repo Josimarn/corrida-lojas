@@ -1,0 +1,6 @@
+# ExpxAgents Preferences
+
+- **User Name:** Josimar Nascimento
+- **Language:** pr-BR
+- **IDE:** claude-code
+- **Date Format:** DD/MM/YYYY
