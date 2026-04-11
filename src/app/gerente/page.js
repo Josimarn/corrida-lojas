@@ -162,13 +162,13 @@ export default function GerentePage() {
   // ─── Scores ──────────────────────────────────────────────
   function getVendedorMeta(vid) {
     const m = metasVendedor.find(mv => mv.vendedor_id === vid)
-    // Fallback: distribui a meta da loja por vendedor e por semana
+    // Fallback: distribui a meta da loja por vendedor (só quando não há meta individual)
     const nv = vendedores.length || 1
     const metaVendaFallback = metaLoja?.meta_total ? (metaLoja.meta_total / nv) : 0
     return {
-      meta_venda:  m?.meta_venda  || metaVendaFallback,
-      meta_ticket: m?.meta_ticket || 0,
-      meta_pa:     m?.meta_pa     || 0,
+      meta_venda:  m != null ? (m.meta_venda  ?? 0) : metaVendaFallback,
+      meta_ticket: m != null ? (m.meta_ticket ?? 0) : 0,
+      meta_pa:     m != null ? (m.meta_pa     ?? 0) : 0,
     }
   }
 
@@ -179,8 +179,12 @@ export default function GerentePage() {
     setFPesoPA(String(metaLoja?.peso_pa || 30))
     const mv = {}
     vendedores.forEach(v => {
-      const m = metasVendedor.find(mv => mv.vendedor_id === v.id)
-      mv[v.id] = { venda: m?.meta_venda || '', ticket: m?.meta_ticket || '', pa: m?.meta_pa || '' }
+      const m = metasVendedor.find(x => x.vendedor_id === v.id)
+      mv[v.id] = {
+        venda:  m != null ? String(m.meta_venda  ?? '') : '',
+        ticket: m != null ? String(m.meta_ticket ?? '') : '',
+        pa:     m != null ? String(m.meta_pa     ?? '') : '',
+      }
     })
     setFMetasVend(mv)
     setMsgM('')
@@ -206,14 +210,24 @@ export default function GerentePage() {
     }, { onConflict: 'loja_id,ano,mes' })
 
     // Salva metas por vendedor
+    // IMPORTANTE: semana=null não conflita no UNIQUE do Postgres (NULL≠NULL),
+    // por isso usamos DELETE + INSERT para garantir idempotência.
     for (const v of vendedores) {
       const mv = fMetasVend[v.id] || {}
-      await supabase.from('metas_vendedor').upsert({
+      await supabase.from('metas_vendedor')
+        .delete()
+        .eq('vendedor_id', v.id)
+        .eq('loja_id', loja.id)
+        .eq('ano', vY)
+        .eq('mes', vM + 1)
+        .is('semana', null)
+
+      await supabase.from('metas_vendedor').insert({
         vendedor_id: v.id, loja_id: loja.id, ano: vY, mes: vM + 1, semana: null,
         meta_venda:  parseFloat(mv.venda)  || 0,
         meta_ticket: parseFloat(mv.ticket) || 0,
         meta_pa:     parseFloat(mv.pa)     || 0,
-      }, { onConflict: 'vendedor_id,ano,mes,semana' })
+      })
     }
 
     setSavingM(false)
@@ -1095,6 +1109,9 @@ export default function GerentePage() {
               <div className="mb-3">
                 <label className="label-field">Meta Total do Mês (R$)</label>
                 <input type="number" value={fMetaTotal} onChange={e => setFMetaTotal(e.target.value)} placeholder="Ex: 50000" min="0" step="0.01" />
+                {fMetaTotal > 0 && (
+                  <p className="text-xs text-stone-400 mt-1">{fmtR(parseFloat(fMetaTotal))}</p>
+                )}
               </div>
               <div className="grid grid-cols-3 gap-2">
                 <div>
@@ -1128,6 +1145,9 @@ export default function GerentePage() {
                         <input type="number" placeholder="0,00" min="0" step="0.01"
                           value={fMetasVend[v.id]?.venda || ''}
                           onChange={e => setFMetasVend(p => ({ ...p, [v.id]: { ...p[v.id], venda: e.target.value } }))} />
+                        {parseFloat(fMetasVend[v.id]?.venda) > 0 && (
+                          <p className="text-xs text-stone-400 mt-0.5">{fmtR(parseFloat(fMetasVend[v.id]?.venda))}</p>
+                        )}
                       </div>
                       <div>
                         <label className="label-field">Ticket Médio (R$)</label>
