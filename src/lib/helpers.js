@@ -102,6 +102,26 @@ const PALETA = [
 ]
 export function getCor(i) { return PALETA[i % PALETA.length] }
 
+// ─── Posição do carro na pista ───────────────────────────────
+// Retorna a semana atual (1–4) para o mês visualizado,
+// ou null se for mês passado/futuro (pista toda disponível).
+export function getWeekNumber(vY, vM, today = new Date()) {
+  const isCurrentMonth = vY === today.getFullYear() && vM === today.getMonth()
+  if (!isCurrentMonth) return null
+  const daysInMonth = new Date(vY, vM + 1, 0).getDate()
+  return Math.min(Math.ceil((today.getDate() / daysInMonth) * 4), 4)
+}
+
+// Posiciona o carro dentro do quadrante da semana atual:
+//   - Mês corrente: carro avança de weekStart até weekEnd conforme o score
+//   - Mês passado/futuro (weekNumber=null): posição = score real
+export function applyWeekPos(score, weekNumber) {
+  if (weekNumber === null) return Math.min(score, 100)
+  const weekStart = (weekNumber - 1) * 25
+  const weekEnd   = weekNumber * 25
+  return Math.min(weekStart + (score / weekEnd) * 25, weekEnd)
+}
+
 export function getLojaLabel(loja) {
   if (!loja) return ''
   if (loja.exibir_como === 'codigo' && loja.codigo) return loja.codigo

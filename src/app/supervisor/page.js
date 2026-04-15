@@ -7,7 +7,7 @@ import RaceTrack from '@/components/RaceTrack'
 import ScoreCard from '@/components/ScoreCard'
 import {
   getWeeksOfMonth, getMonthDateKeys, toDateKey, calcScore, aggregateLancamentos,
-  fmtR, fmtPct, MESES, MEDALS, getCor
+  fmtR, fmtPct, MESES, MEDALS, getCor, getWeekNumber, applyWeekPos
 } from '@/lib/helpers'
 
 function LojaCard({ loja, dados, index }) {
@@ -91,6 +91,7 @@ export default function SupervisorPage() {
   const [vM, setVM] = useState(TODAY.getMonth())
   const [semanas,  setSemanas]  = useState([])
   const [selD,     setSelD]     = useState(toDateKey(TODAY))
+  const [selDs,    setSelDs]    = useState([toDateKey(TODAY)])
   const [anossel,  setAnosSel]  = useState([TODAY.getFullYear()])
   const [dadosAnual, setDadosAnual] = useState({})
 
@@ -117,11 +118,13 @@ export default function SupervisorPage() {
       const { data: mvs } = await supabase.from('metas_vendedor').select('*').eq('loja_id', loja.id).eq('ano', vY).eq('mes', vM + 1).is('semana', null)
       const pesos = { peso_venda: ml?.peso_venda || 40, peso_ticket: ml?.peso_ticket || 30, peso_pa: ml?.peso_pa || 30 }
       const scores = {}
+      const weekNumber = getWeekNumber(vY, vM)
       ;(vs || []).forEach(v => {
         const st   = aggregateLancamentos((lcs || []).filter(l => l.vendedor_id === v.id))
         const mv   = (mvs || []).find(m => m.vendedor_id === v.id) || {}
         const meta = { meta_venda: mv.meta_venda || 0, meta_ticket: mv.meta_ticket || 0, meta_pa: mv.meta_pa || 0 }
-        scores[v.id] = { ...calcScore(st, meta, pesos), stats: st, pesos }
+        const calc = calcScore(st, meta, pesos)
+        scores[v.id] = { ...calc, scoreDisplay: calc.score, score: applyWeekPos(calc.score, weekNumber), stats: st, pesos }
       })
       dados[loja.id] = { vendedores: vs || [], scores, metaLoja: ml, metasVendedor: mvs || [], lancamentos: lcs || [] }
     }
@@ -166,6 +169,7 @@ export default function SupervisorPage() {
     if (nm > 11) { nm = 0; ny++ }
     if (nm < 0)  { nm = 11; ny-- }
     setVM(nm); setVY(ny)
+    setSelDs([toDateKey(new Date(ny, nm, new Date().getDate()))])
   }
 
   // KPIs consolidados
@@ -179,12 +183,13 @@ export default function SupervisorPage() {
   // Score por loja (para a pista de lojas)
   const lojasParaPista = lojas.map(l => ({ id: l.id, nome: l.nome, foto_url: null }))
   const scoresLojas = {}
+  const weekNumberLojas = getWeekNumber(vY, vM)
   lojas.forEach(loja => {
     const d = lojaData[loja.id] || { lancamentos: [], metaLoja: null }
     const totalVendas = d.lancamentos.reduce((s, l) => s + (l.vendas || 0), 0)
     const meta = d.metaLoja?.meta_total || 0
-    const score = meta > 0 ? Math.round((totalVendas / meta) * 1000) / 10 : 0
-    scoresLojas[loja.id] = { score }
+    const rawScore = meta > 0 ? Math.round((totalVendas / meta) * 1000) / 10 : 0
+    scoresLojas[loja.id] = { scoreDisplay: rawScore, score: applyWeekPos(rawScore, weekNumberLojas) }
   })
 
   const dadosLojaSel = lojaData[selLoja] || { vendedores: [], scores: {}, metaLoja: null, metasVendedor: [] }
@@ -325,16 +330,19 @@ export default function SupervisorPage() {
                 <div>
                   <p className="section-title">Desempenho dos Vendedores</p>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 mt-3">
-                    {dadosLojaSel.vendedores.map((v, i) => {
-                      const mv = dadosLojaSel.metasVendedor.find(m => m.vendedor_id === v.id) || {}
-                      return (
-                        <ScoreCard key={v.id}
-                          vendedor={{ ...v, meta: { meta_venda: mv.meta_venda || 0, meta_ticket: mv.meta_ticket || 0, meta_pa: mv.meta_pa || 0 } }}
-                          stats={dadosLojaSel.scores[v.id]?.stats}
-                          scored={dadosLojaSel.scores[v.id]}
-                          index={i} />
-                      )
-                    })}
+                    {[...dadosLojaSel.vendedores]
+                      .map((v, i) => ({ v, i }))
+                      .sort((a, b) => (dadosLojaSel.scores[b.v.id]?.scoreDisplay ?? 0) - (dadosLojaSel.scores[a.v.id]?.scoreDisplay ?? 0))
+                      .map(({ v, i }) => {
+                        const mv = dadosLojaSel.metasVendedor.find(m => m.vendedor_id === v.id) || {}
+                        return (
+                          <ScoreCard key={v.id}
+                            vendedor={{ ...v, meta: { meta_venda: mv.meta_venda || 0, meta_ticket: mv.meta_ticket || 0, meta_pa: mv.meta_pa || 0 } }}
+                            stats={dadosLojaSel.scores[v.id]?.stats}
+                            scored={dadosLojaSel.scores[v.id]}
+                            index={i} />
+                        )
+                      })}
                   </div>
                 </div>
 
@@ -342,7 +350,7 @@ export default function SupervisorPage() {
                   <p className="section-title">Classificação</p>
                   <div className="space-y-2 mt-3">
                     {[...dadosLojaSel.vendedores]
-                      .map((v, i) => ({ v, i, score: dadosLojaSel.scores[v.id]?.score || 0 }))
+                      .map((v, i) => ({ v, i, score: dadosLojaSel.scores[v.id]?.scoreDisplay ?? dadosLojaSel.scores[v.id]?.score ?? 0 }))
                       .sort((a, b) => b.score - a.score)
                       .map(({ v, i, score }, r) => {
                         const c = getCor(i)
@@ -363,30 +371,39 @@ export default function SupervisorPage() {
 
         {/* ── VISÃO: CORRIDA DIÁRIA ── */}
         {visao === 'diaria' && (() => {
-          // Score de cada loja no dia selecionado
+          const allMonthKeys = semanas.flat().filter(d => d.inMonth).map(d => d.key)
+          const keysAtivos = selDs.length > 0 ? selDs : allMonthKeys
+
           const scoresLojasDia = {}
           lojas.forEach(loja => {
             const d   = lojaData[loja.id] || { lancamentos: [], metaLoja: null }
-            const lcs = (d.lancamentos || []).filter(l => l.data === selD)
-            const totalDia = lcs.reduce((s, l) => s + (l.vendas || 0), 0)
-            // Meta diária estimada: meta mensal / 26 dias úteis
-            const metaDia = (d.metaLoja?.meta_total || 0) / 26
-            const score = metaDia > 0 ? Math.round(totalDia / metaDia * 1000) / 10 : 0
-            scoresLojasDia[loja.id] = { score, vendas: totalDia }
+            const lcs = (d.lancamentos || []).filter(l => keysAtivos.includes(l.data))
+            const st  = aggregateLancamentos(lcs)
+            const metaDia = ((d.metaLoja?.meta_total || 0) / 26) * keysAtivos.length
+            const score = metaDia > 0 ? Math.round(st.vendas / metaDia * 1000) / 10 : 0
+            scoresLojasDia[loja.id] = { scoreDisplay: score, score, vendas: st.vendas }
           })
 
-          const selObjDia = semanas.flat().find(d => d.key === selD)
+          const diasSorted = [...selDs].sort()
+          const tituloSel = selDs.length === 0
+            ? 'Mês inteiro'
+            : selDs.length === 1
+              ? (() => { const o = semanas.flat().find(d => d.key === selDs[0]); return o ? `${o.lbl}, ${String(o.date.getDate()).padStart(2,'0')}/${String(vM+1).padStart(2,'0')}` : selDs[0] })()
+              : `${diasSorted[0].slice(8,10)}/${String(vM+1).padStart(2,'0')} – ${diasSorted.at(-1).slice(8,10)}/${String(vM+1).padStart(2,'0')} (${selDs.length} dias)`
 
           return (
             <>
-              {/* Seletor de dia */}
+              {/* Seletor de dia — multiselect */}
               <div className="flex flex-wrap gap-2">
                 {semanas.flat().filter(d => d.inMonth).map(d => {
                   const isT = d.key === todayKey
                   const has = lojas.some(loja => (lojaData[loja.id]?.lancamentos || []).some(l => l.data === d.key))
-                  const act = d.key === selD
+                  const act = selDs.includes(d.key)
                   return (
-                    <button key={d.key} onClick={() => setSelD(d.key)}
+                    <button key={d.key} onClick={() => {
+                      setSelDs(prev => prev.includes(d.key) ? prev.filter(k => k !== d.key) : [...prev, d.key])
+                      setSelD(d.key)
+                    }}
                       className={`relative px-3 py-1.5 rounded-lg text-sm border transition-all ${act ? 'bg-stone-900 text-white border-stone-900' : 'bg-white text-stone-600 border-stone-200 hover:bg-stone-50'}`}>
                       {String(d.date.getDate()).padStart(2,'0')}/{String(vM+1).padStart(2,'0')}
                       {isT && <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-blue-500" />}
@@ -397,14 +414,12 @@ export default function SupervisorPage() {
               </div>
 
               <div className="card p-4">
-                <p className="section-title mb-4">
-                  Pista do Dia — {selObjDia ? `${selObjDia.lbl}, ${String(selObjDia.date.getDate()).padStart(2,'0')}/${String(vM+1).padStart(2,'0')}/${vY}` : selD}
-                </p>
+                <p className="section-title mb-4">Pista — {tituloSel}</p>
                 <RaceTrack vendedores={lojasParaPista} scores={scoresLojasDia} semanas={0} />
               </div>
 
               <div>
-                <p className="section-title">Vendas do Dia por Loja</p>
+                <p className="section-title">Vendas {selDs.length > 1 ? `(${selDs.length} dias)` : selDs.length === 1 ? 'do Dia' : '(mês inteiro)'} por Loja</p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 mt-3">
                   {[...lojas]
                     .map((loja, i) => ({ loja, i, sc: scoresLojasDia[loja.id] || { score: 0, vendas: 0 } }))
@@ -412,7 +427,7 @@ export default function SupervisorPage() {
                     .map(({ loja, i, sc }, r) => {
                       const c   = getCor(i)
                       const d   = lojaData[loja.id] || { lancamentos: [] }
-                      const lcs = (d.lancamentos || []).filter(l => l.data === selD)
+                      const lcs = (d.lancamentos || []).filter(l => keysAtivos.includes(l.data))
                       const st  = aggregateLancamentos(lcs)
                       return (
                         <div key={loja.id} className="card p-4">
@@ -427,14 +442,14 @@ export default function SupervisorPage() {
                             </div>
                             <span className="text-base font-extrabold" style={{ color: c.border }}>{MEDALS[r] || `${r+1}º`}</span>
                           </div>
-                          {st.atendimentos > 0 || st.vendas > 0 ? (
+                          {st.vendas > 0 ? (
                             <div className="space-y-1 mb-2">
                               <div className="flex justify-between text-xs"><span className="text-stone-400">Vendas</span><span className="font-bold">{fmtR(st.vendas)}</span></div>
                               <div className="flex justify-between text-xs"><span className="text-stone-400">Atend.</span><span className="font-bold">{st.atendimentos}</span></div>
                               <div className="flex justify-between text-xs"><span className="text-stone-400">Peças</span><span className="font-bold">{st.pecas}</span></div>
                             </div>
                           ) : <p className="text-xs text-stone-400 mb-2">Sem lançamento.</p>}
-                          <p className="text-xs font-bold text-right" style={{ color: c.border }}>{fmtPct(sc.score)}</p>
+                          <p className="text-xs font-bold text-right" style={{ color: c.border }}>{fmtPct(sc.scoreDisplay ?? sc.score)}</p>
                         </div>
                       )
                     })}

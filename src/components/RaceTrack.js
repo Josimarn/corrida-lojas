@@ -9,10 +9,10 @@ export default function RaceTrack({ vendedores, scores, semanas = 4 }) {
     </div>
   )
 
-  // Ordena por score (quem está na frente primeiro)
+  // Ordena pelo score real (scoreDisplay), não pelo score limitado à semana
   const ordenados = [...vendedores].sort((a, b) => {
-    const sa = scores?.[a.id]?.score || 0
-    const sb = scores?.[b.id]?.score || 0
+    const sa = scores?.[a.id]?.scoreDisplay ?? scores?.[a.id]?.score ?? 0
+    const sb = scores?.[b.id]?.scoreDisplay ?? scores?.[b.id]?.score ?? 0
     return sb - sa
   })
 
@@ -114,7 +114,7 @@ export default function RaceTrack({ vendedores, scores, semanas = 4 }) {
 
               {/* Score */}
               <div className="text-xs font-black min-w-[44px] text-right tabular-nums"
-                style={{ color: isLeading ? '#FFD700' : c.fill }}>
+                style={{ color: c.border }}>
                 {fmtPct(display)}
                 {isLeading && <span className="ml-1">👑</span>}
               </div>

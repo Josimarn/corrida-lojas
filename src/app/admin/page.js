@@ -35,6 +35,7 @@ export default function AdminPage() {
   const [loading,  setLoading]  = useState(true)
   const [tab,      setTab]      = useState('lojas') // 'lojas' | 'vinculos' | 'config'
   const [tema,       setTema]       = useState({ cor_primaria: '#FFBE00', cor_secundaria: '#CC8800', logo_url: '' })
+  const [ticketAuto, setTicketAuto] = useState(true)
   const [savingTema, setSavingTema] = useState(false)
   const [msgTema,    setMsgTema]    = useState(null)
 
@@ -94,7 +95,10 @@ export default function AdminPage() {
     if (u?.empresa_id) {
       const { data: e } = await supabase.from('empresas').select('*').eq('id', u.empresa_id).single()
       setEmpresa(e)
-      if (e) setTema({ cor_primaria: e.cor_primaria || '#FFBE00', cor_secundaria: e.cor_secundaria || '#CC8800', logo_url: e.logo_url || '' })
+      if (e) {
+        setTema({ cor_primaria: e.cor_primaria || '#FFBE00', cor_secundaria: e.cor_secundaria || '#CC8800', logo_url: e.logo_url || '' })
+        setTicketAuto(e.calcular_ticket_auto !== false)
+      }
 
       const { data: ls } = await supabase.from('lojas').select('*').eq('empresa_id', u.empresa_id).order('nome')
       setLojas(ls || [])
@@ -121,9 +125,10 @@ export default function AdminPage() {
     if (!empresa?.id) return
     setSavingTema(true); setMsgTema(null)
     const { error } = await supabase.from('empresas').update({
-      cor_primaria:   tema.cor_primaria   || '#FFBE00',
-      cor_secundaria: tema.cor_secundaria || '#CC8800',
-      logo_url:       tema.logo_url?.trim() || null,
+      cor_primaria:         tema.cor_primaria   || '#FFBE00',
+      cor_secundaria:       tema.cor_secundaria || '#CC8800',
+      logo_url:             tema.logo_url?.trim() || null,
+      calcular_ticket_auto: ticketAuto,
     }).eq('id', empresa.id)
     setSavingTema(false)
     if (error) setMsgTema({ ok: false, text: 'Erro: ' + error.message })
@@ -642,6 +647,27 @@ export default function AdminPage() {
             {tema.logo_url && (
               <img src={tema.logo_url} alt="logo" className="mt-2 h-10 object-contain rounded" />
             )}
+          </div>
+
+          <div className="border-t border-stone-100 pt-4 mb-4">
+            <p className="text-xs font-bold text-stone-400 uppercase tracking-widest mb-3">Configurações de Cálculo</p>
+            <div className="flex items-center justify-between gap-3 bg-stone-50 rounded-lg px-3 py-2.5">
+              <div>
+                <p className="text-sm font-medium text-stone-800">Calcular Ticket Médio automaticamente</p>
+                <p className="text-xs text-stone-400 mt-0.5">Desative se sua equipe informa o ticket manualmente</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setTicketAuto(v => !v)}
+                className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none ${ticketAuto ? 'bg-green-500' : 'bg-stone-300'}`}
+                role="switch"
+                aria-checked={ticketAuto}>
+                <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ${ticketAuto ? 'translate-x-5' : 'translate-x-0'}`} />
+              </button>
+            </div>
+            <p className="text-xs text-stone-400 mt-1.5 px-1">
+              {ticketAuto ? '✅ Automático: Ticket = Vendas ÷ Atendimentos' : '✏️ Manual: Ticket informado no lançamento diário'}
+            </p>
           </div>
 
           {msgTema && (

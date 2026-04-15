@@ -1,5 +1,29 @@
 'use client'
 import { useState, useEffect, useCallback, useRef } from 'react'
+
+function CurrencyInput({ value, onChange, placeholder, ...props }) {
+  const [focused, setFocused] = useState(false)
+  const num = parseFloat(String(value || '').replace(',', '.'))
+  const display = !focused && value !== '' && value !== undefined && !isNaN(num)
+    ? num.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    : (value || '')
+  return (
+    <input
+      {...props}
+      type="text"
+      inputMode="decimal"
+      value={display}
+      placeholder={placeholder || 'R$ 0,00'}
+      onFocus={e => { setFocused(true); setTimeout(() => e.target.select(), 0) }}
+      onBlur={() => setFocused(false)}
+      onChange={e => {
+        const raw = e.target.value.replace(/[^\d,]/g, '').replace(',', '.')
+        const parts = raw.split('.')
+        onChange(parts.length > 1 ? parts[0] + '.' + parts.slice(1).join('') : parts[0])
+      }}
+    />
+  )
+}
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase-browser'
 import NavBar from '@/components/NavBar'
@@ -8,7 +32,7 @@ import ScoreCard from '@/components/ScoreCard'
 import Avatar from '@/components/Avatar'
 import {
   getWeeksOfMonth, getMonthDateKeys, toDateKey, calcScore, aggregateLancamentos,
-  fmtR, fmtPct, MESES, MEDALS, getCor
+  fmtR, fmtPct, MESES, MEDALS, getCor, getWeekNumber, applyWeekPos
 } from '@/lib/helpers'
 
 const TODAY = new Date()
@@ -237,12 +261,7 @@ export default function GerentePage() {
 
   // Scores sempre do mês inteiro
   const scores = {}
-  const trackSemanas = Math.min(semanas.length, 4) || 1
-  // Semanas com dados (global — define o limite da pista atual)
-  const semanasComDados = semanas.filter(w =>
-    w.some(d => d.inMonth && lancamentos.some(l => l.data === d.key))
-  ).length
-  const weekMaxPos = semanasComDados > 0 ? (semanasComDados / trackSemanas) * 100 : 0
+  const weekNumber = getWeekNumber(vY, vM)
 
   vendedores.forEach(v => {
     const lcs   = lancamentos.filter(l => l.vendedor_id === v.id)
@@ -253,8 +272,9 @@ export default function GerentePage() {
 
     scores[v.id] = {
       ...calc,
-      scoreDisplay: calc.score,                    // score real → classificação/desempenho/labels
-      score: Math.min(calc.score, weekMaxPos),     // posição do carro → limitado à semana atual
+      scoreDisplay: calc.score,
+      // Posição proporcional dentro da semana atual (spread visual sem ultrapassar o limite de tempo)
+      score: applyWeekPos(calc.score, weekNumber),
       stats,
       pesos,
     }
@@ -517,7 +537,8 @@ export default function GerentePage() {
                 const st   = aggregateLancamentos(lcs)
                 const meta = (d.metasVendedor || []).find(m => m.vendedor_id === v.id) || {}
                 const pesos = { peso_venda: d.metaLoja?.peso_venda || 40, peso_ticket: d.metaLoja?.peso_ticket || 30, peso_pa: d.metaLoja?.peso_pa || 30 }
-                scoresLoja[v.id] = calcScore(st, meta, pesos)
+                const calc = calcScore(st, meta, pesos)
+                scoresLoja[v.id] = { ...calc, scoreDisplay: calc.score, score: applyWeekPos(calc.score, weekNumber) }
               })
               return (
                 <div key={l.id} className="card p-4">
@@ -594,11 +615,11 @@ export default function GerentePage() {
             {semanas.map((w, i) => {
               const f   = w.find(d => d.inMonth) || w[0]
               const l   = [...w].reverse().find(d => d.inMonth) || w[5]
-              const act = selWs.includes(i)
+              const act = selW === i
               return (
                 <button key={i} onClick={() => {
                   setSelW(i)
-                  setSelWs(prev => prev.includes(i) ? prev.filter(x => x !== i) : [...prev, i])
+                  setSelWs([i])
                   setSelDs([]) // limpa dias ao trocar semana
                   const fd = w.find(d => d.inMonth); if (fd) setSelD(fd.key)
                 }}
@@ -763,7 +784,7 @@ export default function GerentePage() {
                       const cur  = lancamentos.find(l => l.vendedor_id === v.id && l.data === selD)
                       return { v, i, sc, stV, cur }
                     })
-                    .sort((a, b) => b.sc.score - a.sc.score)
+                    .sort((a, b) => (b.sc.scoreDisplay ?? b.sc.score) - (a.sc.scoreDisplay ?? a.sc.score))
                     .map(({ v, i, sc, stV, cur }, r) => {
                       const c = getCor(i)
                       return (
@@ -780,7 +801,7 @@ export default function GerentePage() {
                               <div className="flex justify-between text-xs"><span className="text-stone-400">Vendas</span><span className="font-bold">{fmtR(stV.vendas)}</span></div>
                               <div className="flex justify-between text-xs"><span className="text-stone-400">Atend.</span><span className="font-bold">{stV.atendimentos}</span></div>
                               <div className="flex justify-between text-xs"><span className="text-stone-400">Peças</span><span className="font-bold">{stV.pecas}</span></div>
-                              <div className="flex justify-between text-xs"><span className="text-stone-400">Score</span><span className="font-bold" style={{ color: c.border }}>{sc.score.toFixed(1)}%</span></div>
+                              <div className="flex justify-between text-xs"><span className="text-stone-400">Score</span><span className="font-bold" style={{ color: c.border }}>{(sc.scoreDisplay ?? sc.score).toFixed(1)}%</span></div>
                             </div>
                           ) : <p className="text-xs text-stone-400 mb-3">Sem lançamento.</p>}
                         </div>
@@ -917,7 +938,7 @@ export default function GerentePage() {
             </div>
             <div className="space-y-3 mb-4">
               <div><label className="label-field">Total de Vendas do dia (R$)</label>
-                <input type="number" value={fVendas} onChange={e => setFVendas(e.target.value)} placeholder="0,00" min="0" step="0.01" /></div>
+                <CurrencyInput value={fVendas} onChange={setFVendas} placeholder="R$ 0,00" /></div>
               <div><label className="label-field">Nº de Atendimentos</label>
                 <input type="number" value={fAtend} onChange={e => setFAtend(e.target.value)} placeholder="0" min="0" /></div>
               <div><label className="label-field">Nº de Peças Vendidas</label>
@@ -1108,10 +1129,7 @@ export default function GerentePage() {
               <p className="text-xs font-bold text-stone-500 uppercase tracking-widest mb-3">Meta da Loja</p>
               <div className="mb-3">
                 <label className="label-field">Meta Total do Mês (R$)</label>
-                <input type="number" value={fMetaTotal} onChange={e => setFMetaTotal(e.target.value)} placeholder="Ex: 50000" min="0" step="0.01" />
-                {fMetaTotal > 0 && (
-                  <p className="text-xs text-stone-400 mt-1">{fmtR(parseFloat(fMetaTotal))}</p>
-                )}
+                <CurrencyInput value={fMetaTotal} onChange={setFMetaTotal} placeholder="Ex: 183.750,00" />
               </div>
               <div className="grid grid-cols-3 gap-2">
                 <div>
@@ -1142,18 +1160,15 @@ export default function GerentePage() {
                     <div className="grid grid-cols-3 gap-2">
                       <div>
                         <label className="label-field">Venda (R$)</label>
-                        <input type="number" placeholder="0,00" min="0" step="0.01"
+                        <CurrencyInput placeholder="0,00"
                           value={fMetasVend[v.id]?.venda || ''}
-                          onChange={e => setFMetasVend(p => ({ ...p, [v.id]: { ...p[v.id], venda: e.target.value } }))} />
-                        {parseFloat(fMetasVend[v.id]?.venda) > 0 && (
-                          <p className="text-xs text-stone-400 mt-0.5">{fmtR(parseFloat(fMetasVend[v.id]?.venda))}</p>
-                        )}
+                          onChange={val => setFMetasVend(p => ({ ...p, [v.id]: { ...p[v.id], venda: val } }))} />
                       </div>
                       <div>
                         <label className="label-field">Ticket Médio (R$)</label>
-                        <input type="number" placeholder="0,00" min="0" step="0.01"
+                        <CurrencyInput placeholder="0,00"
                           value={fMetasVend[v.id]?.ticket || ''}
-                          onChange={e => setFMetasVend(p => ({ ...p, [v.id]: { ...p[v.id], ticket: e.target.value } }))} />
+                          onChange={val => setFMetasVend(p => ({ ...p, [v.id]: { ...p[v.id], ticket: val } }))} />
                       </div>
                       <div>
                         <label className="label-field">PA (peças)</label>

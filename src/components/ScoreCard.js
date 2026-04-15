@@ -19,8 +19,8 @@ function MetricBar({ label, pct, value, meta, color }) {
 
 export default function ScoreCard({ vendedor, stats, scored, index }) {
   const c = getCor(index)
-  const score = Math.min(scored?.score || 0, 999)
-  const atingiu = score >= 100
+  const score = Math.min(scored?.scoreDisplay ?? scored?.score ?? 0, 999)
+  const atingiu = (scored?.scoreDisplay ?? scored?.score ?? 0) >= 100
 
   return (
     <div className={`card p-4 ${atingiu ? 'ring-2 ring-green-300' : ''}`}>

@@ -1,9 +1,6 @@
 {
   "/page": "app/page.js",
-  "/vendedor/page": "app/vendedor/page.js",
   "/super-admin/page": "app/super-admin/page.js",
-  "/admin/page": "app/admin/page.js",
-  "/dono/page": "app/dono/page.js",
-  "/dashboard/page": "app/dashboard/page.js",
+  "/supervisor/page": "app/supervisor/page.js",
   "/gerente/page": "app/gerente/page.js"
 }

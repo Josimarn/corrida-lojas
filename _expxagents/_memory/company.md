@@ -2,12 +2,12 @@
 
 ## Company
 - **Name:** Solucap
-- **Website:** solucap.com.br
-- **Sector:** Tecnologia
-- **Description:** Desenvolvimento de sistema para recapagem
+- **Website:** 
+- **Sector:** tecnologia
+- **Description:** Software house
 
 ## Target Audience
-- **Primary:** Recapadoras de pneus
+- **Primary:** Recapadora de pneus
 
 ## Tone of Voice
-- **Style:** formal
+- **Style:** friendly

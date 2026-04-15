@@ -7,7 +7,7 @@ import RaceTrack from '@/components/RaceTrack'
 import Avatar from '@/components/Avatar'
 import {
   getMonthDateKeys, getWeeksOfMonth, toDateKey, aggregateLancamentos,
-  fmtR, fmtPct, MESES, MEDALS, getCor
+  fmtR, fmtPct, MESES, MEDALS, getCor, getWeekNumber, applyWeekPos
 } from '@/lib/helpers'
 
 function lojaAvatar(loja) {
@@ -217,11 +217,12 @@ export default function DonoPage() {
     foto_url: null,
     label: l.codigo || null
   }))
+  const weekNumberDono = getWeekNumber(vY, vM)
   const scoresLojas = {}
   lojas.forEach(l => {
     const d = lojaData[l.id] || { totalVendas: 0, metaLoja: null }
-    const score = d.metaLoja?.meta_total > 0 ? Math.round(d.totalVendas / d.metaLoja.meta_total * 1000) / 10 : 0
-    scoresLojas[l.id] = { score }
+    const rawScore = d.metaLoja?.meta_total > 0 ? Math.round(d.totalVendas / d.metaLoja.meta_total * 1000) / 10 : 0
+    scoresLojas[l.id] = { scoreDisplay: rawScore, score: applyWeekPos(rawScore, weekNumberDono) }
   })
 
   // Ranking
@@ -362,7 +363,7 @@ export default function DonoPage() {
           }))
           const scoresCoords = {}
           rankCoords.forEach(({ reg, pct }, i) => {
-            scoresCoords[reg.usuario?.id || `reg-${i}`] = { score: pct }
+            scoresCoords[reg.usuario?.id || `reg-${i}`] = { scoreDisplay: pct, score: applyWeekPos(pct, weekNumberDono) }
           })
 
           return (
@@ -410,7 +411,7 @@ export default function DonoPage() {
             const st  = aggregateLancamentos(lcs)
             const metaDia = ((d.metaLoja?.meta_total || 0) / 26) * selDs.length
             const score   = metaDia > 0 ? Math.round(st.vendas / metaDia * 1000) / 10 : 0
-            scoresDia[l.id] = { score, vendas: st.vendas, atendimentos: st.atendimentos, pecas: st.pecas }
+            scoresDia[l.id] = { scoreDisplay: score, score, vendas: st.vendas, atendimentos: st.atendimentos, pecas: st.pecas }
           })
 
           const diasSorted = [...selDs].sort()

@@ -61,6 +61,15 @@ export default function SuperAdminPage() {
   const [savingTA,     setSavingTA]     = useState(false)
   const [msgTA,        setMsgTA]        = useState(null)
 
+  // Aba Logs
+  const [logs,         setLogs]         = useState([])
+  const [loadingLogs,  setLoadingLogs]  = useState(false)
+  const [logTabela,    setLogTabela]    = useState('')
+  const [logEmpId,     setLogEmpId]     = useState('')
+
+  // Modal editar empresa — toggle ticket
+  const [editTicketAuto, setEditTicketAuto] = useState(true)
+
   // Usuários — inline edit nome
   const [editUserId,   setEditUserId]   = useState(null)
   const [editUserNome, setEditUserNome] = useState('')
@@ -71,7 +80,8 @@ export default function SuperAdminPage() {
   const [filtroPerfil,    setFiltroPerfil]    = useState('')
   const [filtroBusca,     setFiltroBusca]     = useState('')
   const [buscaEmpresa,    setBuscaEmpresa]    = useState('')
-  const [empSelecionada,  setEmpSelecionada]  = useState(null) // filtra dashboard
+  const [empSelecionada,  setEmpSelecionada]  = useState(null)
+  const [buscaUsuario, setBuscaUsuario] = useState('') // filtra dashboard
 
   // Modal novo usuário
   const [modalUser, setModalUser] = useState(false)
@@ -129,9 +139,10 @@ export default function SuperAdminPage() {
     setSavingEE(true); setMsgEE(null)
     const { error } = await supabase.from('empresas').update({
       ...empPayload(editEmp),
-      cor_primaria:   editTema.cor_primaria   || '#FFBE00',
-      cor_secundaria: editTema.cor_secundaria || '#CC8800',
-      logo_url:       editTema.logo_url?.trim() || null,
+      cor_primaria:          editTema.cor_primaria   || '#FFBE00',
+      cor_secundaria:        editTema.cor_secundaria || '#CC8800',
+      logo_url:              editTema.logo_url?.trim() || null,
+      calcular_ticket_auto:  editTicketAuto,
     }).eq('id', modalEditEmp.id)
     setSavingEE(false)
     if (error) { setMsgEE({ ok: false, text: 'Erro: ' + error.message }) }
@@ -141,6 +152,16 @@ export default function SuperAdminPage() {
   async function toggleEmpresaAtivo(e) {
     await supabase.from('empresas').update({ ativo: !e.ativo }).eq('id', e.id)
     load()
+  }
+
+  async function loadLogs(tabela = '', empId = '') {
+    setLoadingLogs(true)
+    let q = supabase.from('audit_log').select('*').order('criado_em', { ascending: false }).limit(100)
+    if (tabela) q = q.eq('tabela', tabela)
+    if (empId)  q = q.eq('registro_id', empId)
+    const { data } = await q
+    setLogs(data || [])
+    setLoadingLogs(false)
   }
 
   async function salvarTemaAba() {
@@ -157,20 +178,47 @@ export default function SuperAdminPage() {
   }
 
   // ── Usuário ───────────────────────────────────────────────────
-  async function criarUsuario() {
-    const { nome, email, senha, perfil, empresa_id } = novoUser
-    if (!nome.trim() || !email.trim() || !senha.trim() || !perfil) return
-    setSavingNU(true); setMsgNU(null)
-    const body = { nome, email, senha, perfil }
-    if (empresa_id) body.empresa_id = empresa_id
-    const res = await fetch('/api/super-admin/criar-usuario', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
-    })
-    const json = await res.json()
-    setSavingNU(false)
-    if (!res.ok) { setMsgNU({ ok: false, text: 'Erro: ' + json.error }) }
-    else { setMsgNU({ ok: true, text: 'Usuário criado com sucesso!' }); setUserCriado(true); load() }
+async function criarUsuario() {
+  const { nome, email, senha, perfil, empresa_id } = novoUser
+
+  if (!nome.trim() || !email.trim() || !senha.trim() || !perfil) return
+
+  setSavingNU(true)
+  setMsgNU(null)
+
+  // 🔥 garante empresa correta (respeita filtro)
+  const empresaFinal = empSelecionada?.id || empresa_id
+
+  const body = { nome, email, senha, perfil }
+  if (empresaFinal) body.empresa_id = empresaFinal
+
+  const res = await fetch('/api/super-admin/criar-usuario', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+
+  const json = await res.json()
+
+  setSavingNU(false)
+
+  if (!res.ok) {
+    setMsgNU({ ok: false, text: 'Erro: ' + json.error })
+  } else {
+    setMsgNU({ ok: true, text: 'Usuário criado com sucesso!' })
+    setUserCriado(true)
+
+    // 🔥 LIMPA FORMULÁRIO (mas mantém empresa se filtrada)
+     setNovoUser({
+     nome: '',
+     email: '',
+     senha: '',
+     perfil: novoUser.perfil, // mantém o atual
+     empresa_id: empSelecionada?.id || ''
+})
+    load()
   }
+}
 
   async function salvarNomeUsuario(id) {
     if (!editUserNome.trim()) return
@@ -208,20 +256,28 @@ export default function SuperAdminPage() {
   }, {})
 
   const usuariosFiltrados = usuarios.filter(u => {
+    // 🔥 FILTRO POR EMPRESA
     if (empSelecionada && u.empresa_id !== empSelecionada.id) return false
-    if (filtroPerfil && u.perfil !== filtroPerfil) return false
-    if (filtroBusca) {
-      const q = filtroBusca.toLowerCase()
-      if (!u.nome?.toLowerCase().includes(q) && !u.email?.toLowerCase().includes(q)) return false
-    }
-    return true
+
+    // 🔎 busca
+    if (!buscaUsuario) return true
+    const q = buscaUsuario.toLowerCase()
+
+    return (
+      u.nome?.toLowerCase().includes(q) ||
+      u.email?.toLowerCase().includes(q)
+    )
   })
 
   const empresasFiltradas = empresas.filter(e => {
-    if (!buscaEmpresa) return true
-    const q = buscaEmpresa.toLowerCase()
-    return e.nome?.toLowerCase().includes(q) || e.nome_fantasia?.toLowerCase().includes(q)
-  })
+  // 🔥 FILTRO PRINCIPAL (empresa selecionada)
+  if (empSelecionada && e.id !== empSelecionada.id) return false
+
+  // 🔎 filtro de busca
+  if (!buscaEmpresa) return true
+  const q = buscaEmpresa.toLowerCase()
+  return e.nome?.toLowerCase().includes(q) || e.nome_fantasia?.toLowerCase().includes(q)
+})
 
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center">
@@ -287,7 +343,7 @@ export default function SuperAdminPage() {
 
         {/* Abas */}
         <div className="flex gap-1 bg-stone-200 rounded-xl p-1 w-fit">
-          {[['empresas', 'Empresas'], ['usuarios', 'Usuários'], ['identidade', '🎨 Identidade Visual']].map(([v, l]) => (
+          {[['empresas', 'Empresas'], ['usuarios', 'Usuários'], ['identidade', '🎨 Identidade Visual'], ['logs', '📋 Logs']].map(([v, l]) => (
             <button key={v} onClick={() => setAba(v)}
               className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${aba === v ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500 hover:text-stone-700'}`}>
               {l}
@@ -343,6 +399,7 @@ export default function SuperAdminPage() {
                             cidade:        e.cidade        || '',
                             estado:        e.estado        || '',
                           })
+                          setEditTicketAuto(e.calcular_ticket_auto !== false)
                           setEditTema({
                             cor_primaria:   e.cor_primaria   || '#FFBE00',
                             cor_secundaria: e.cor_secundaria || '#CC8800',
@@ -444,6 +501,95 @@ export default function SuperAdminPage() {
                 </tbody>
               </table>
             </div>
+          </div>
+        )}
+
+        {/* ── ABA LOGS ── */}
+        {aba === 'logs' && (
+          <div className="card p-4">
+            <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
+              <p className="section-title mb-0">📋 Audit Log</p>
+              <div className="flex items-center gap-2 flex-wrap">
+                <select value={logTabela} onChange={e => setLogTabela(e.target.value)}
+                  className="text-xs border border-stone-200 rounded-lg px-2 py-1.5 bg-white text-stone-700">
+                  <option value="">Todas as tabelas</option>
+                  <option value="empresas">Empresas</option>
+                  <option value="lancamentos">Lançamentos</option>
+                  <option value="metas_vendedor">Metas Vendedor</option>
+                  <option value="metas_loja">Metas Loja</option>
+                </select>
+                <select value={logEmpId} onChange={e => setLogEmpId(e.target.value)}
+                  className="text-xs border border-stone-200 rounded-lg px-2 py-1.5 bg-white text-stone-700">
+                  <option value="">Todas as empresas</option>
+                  {empresas.map(e => <option key={e.id} value={e.id}>{e.nome_fantasia || e.nome}</option>)}
+                </select>
+                <button onClick={() => loadLogs(logTabela, logEmpId)} className="btn-secondary text-xs px-3 py-1.5">
+                  🔍 Filtrar
+                </button>
+              </div>
+            </div>
+
+            {loadingLogs ? (
+              <p className="text-sm text-stone-400 text-center py-6">Carregando...</p>
+            ) : logs.length === 0 ? (
+              <p className="text-sm text-stone-400 text-center py-6">
+                Nenhum registro encontrado. Clique em Filtrar para carregar os logs.
+              </p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="text-left text-stone-400 border-b border-stone-100">
+                      <th className="pb-2 font-medium pr-3">Data/Hora</th>
+                      <th className="pb-2 font-medium pr-3">Tabela</th>
+                      <th className="pb-2 font-medium pr-3">Operação</th>
+                      <th className="pb-2 font-medium pr-3">Usuário</th>
+                      <th className="pb-2 font-medium">Alterações</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {logs.map(log => {
+                      const op = log.operacao
+                      const opColor = op === 'INSERT' ? 'badge-green' : op === 'DELETE' ? 'bg-red-100 text-red-700' : 'badge-amber'
+                      const usuario = usuarios.find(u => u.id === log.usuario_id)
+                      return (
+                        <tr key={log.id} className="border-b border-stone-50 last:border-0 align-top">
+                          <td className="py-2 pr-3 text-stone-500 whitespace-nowrap">
+                            {new Date(log.criado_em).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}
+                          </td>
+                          <td className="py-2 pr-3 font-mono text-stone-600">{log.tabela}</td>
+                          <td className="py-2 pr-3">
+                            <span className={`badge text-xs ${opColor}`}>{op}</span>
+                          </td>
+                          <td className="py-2 pr-3 text-stone-500">{usuario?.nome || log.usuario_id?.slice(0, 8) || '—'}</td>
+                          <td className="py-2 text-stone-500 max-w-xs">
+                            {op === 'UPDATE' && log.antes && log.depois ? (
+                              <details className="cursor-pointer">
+                                <summary className="text-xs text-blue-600 hover:underline">Ver diff</summary>
+                                <div className="mt-1 space-y-1">
+                                  {Object.keys(log.depois).filter(k => JSON.stringify(log.antes[k]) !== JSON.stringify(log.depois[k])).map(k => (
+                                    <div key={k} className="text-xs">
+                                      <span className="font-medium text-stone-700">{k}:</span>{' '}
+                                      <span className="line-through text-red-500">{String(log.antes[k] ?? '—')}</span>
+                                      {' → '}
+                                      <span className="text-green-600">{String(log.depois[k] ?? '—')}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </details>
+                            ) : op === 'INSERT' ? (
+                              <span className="text-stone-400 italic">novo registro</span>
+                            ) : op === 'DELETE' ? (
+                              <span className="text-red-400 italic">registro removido</span>
+                            ) : null}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
 
@@ -635,6 +781,28 @@ export default function SuperAdminPage() {
                     onChange={e => setEditTema(p => ({ ...p, logo_url: e.target.value }))}
                     placeholder="https://..." />
                 </div>
+              </div>
+
+              {/* ── Configurações de Cálculo ── */}
+              <div className="border-t border-stone-100 pt-3">
+                <p className="text-xs font-bold text-stone-400 uppercase tracking-widest mb-3">Configurações de Cálculo</p>
+                <div className="flex items-center justify-between gap-3 bg-stone-50 rounded-lg px-3 py-2.5">
+                  <div>
+                    <p className="text-sm font-medium text-stone-800">Calcular Ticket Médio automaticamente</p>
+                    <p className="text-xs text-stone-400 mt-0.5">Desative se a empresa informa o ticket manualmente nos lançamentos</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setEditTicketAuto(v => !v)}
+                    className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none ${editTicketAuto ? 'bg-green-500' : 'bg-stone-300'}`}
+                    role="switch"
+                    aria-checked={editTicketAuto}>
+                    <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ${editTicketAuto ? 'translate-x-5' : 'translate-x-0'}`} />
+                  </button>
+                </div>
+                <p className="text-xs text-stone-400 mt-1.5 px-1">
+                  {editTicketAuto ? '✅ Automático: Ticket = Vendas ÷ Atendimentos' : '✏️ Manual: Ticket informado no lançamento diário'}
+                </p>
               </div>
 
               <Msg msg={msgEE} />
