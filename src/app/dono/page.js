@@ -1,14 +1,164 @@
 'use client'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase-browser'
-import NavBar from '@/components/NavBar'
+import HeaderAbsurdo from '@/components/HeaderAbsurdo'
 import RaceTrack from '@/components/RaceTrack'
 import Avatar from '@/components/Avatar'
+import CardsDesempenho from '@/components/CardsDesempenho'
+import RankingAbsurdo from '@/components/RankingAbsurdo'
+import { motion, AnimatePresence } from 'framer-motion'
 import {
   getMonthDateKeys, getWeeksOfMonth, toDateKey, aggregateLancamentos,
   fmtR, fmtPct, MESES, MEDALS, getCor, getWeekNumber, applyWeekPos
 } from '@/lib/helpers'
+
+function SalaDeGuerra({ lojas, lojaData, supabase }) {
+  const audioRef = useRef(null)
+  const [alerta, setAlerta] = useState(null)
+  const [liderAtual, setLiderAtual] = useState(null)
+
+  function tocarSom() {
+    if (audioRef.current) {
+      audioRef.current.currentTime = 0
+      audioRef.current.play().catch(() => {})
+    }
+  }
+
+  const ranking = [...lojas].map(loja => {
+    const d = lojaData[loja.id] || { totalVendas: 0, metaLoja: null }
+    const percentual = d.metaLoja?.meta_total > 0
+      ? Math.round(d.totalVendas / d.metaLoja.meta_total * 1000) / 10
+      : 0
+    return { id: loja.id, nome: loja.nome, codigo: loja.codigo, percentual }
+  }).sort((a, b) => b.percentual - a.percentual)
+
+  // Detecta mudança de líder
+  useEffect(() => {
+    if (!ranking.length) return
+    const novoLider = ranking[0]
+    if (liderAtual && liderAtual.id !== novoLider.id) {
+      setAlerta(`🚨 ${novoLider.nome} assumiu a liderança!`)
+      tocarSom()
+      setTimeout(() => setAlerta(null), 3000)
+    }
+    setLiderAtual(novoLider)
+  }, [lojaData])
+
+  // Realtime — re-dispara load no pai quando há nova venda
+  useEffect(() => {
+    const channel = supabase
+      .channel('sala-guerra')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'lancamentos' }, () => {
+        tocarSom()
+      })
+      .subscribe()
+    return () => supabase.removeChannel(channel)
+  }, [supabase])
+
+  function medalha(i) {
+    return ['🥇', '🥈', '🥉'][i] ?? null
+  }
+
+  return (
+    <div className="bg-[#0f172a] rounded-xl p-6 shadow-xl space-y-4 relative text-white">
+      <audio ref={audioRef} src="/som.mp3" preload="none" />
+
+      <AnimatePresence>
+        {alerta && (
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            className="absolute top-4 left-1/2 -translate-x-1/2
+              bg-red-500 text-white px-5 py-2 rounded-lg shadow-lg z-50 text-sm font-semibold whitespace-nowrap"
+          >
+            {alerta}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <h2 className="text-lg font-bold flex items-center gap-2">
+        ⚔️ Sala de Guerra — Ranking ao Vivo
+        <span className="text-xs font-normal text-white/40 ml-1">atualização em tempo real</span>
+      </h2>
+
+      {ranking.map((item, index) => {
+        const bateuMeta = item.percentual >= 100
+        return (
+          <motion.div
+            key={item.id}
+            layout
+            className={`p-3 rounded-lg transition-all ${
+              index === 0
+                ? 'bg-yellow-500/10 border border-yellow-400/30'
+                : 'bg-white/5 border border-white/10'
+            }`}
+          >
+            <div className="flex justify-between items-center mb-2">
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-white/40 w-4">{index + 1}</span>
+                <span className="text-lg">{medalha(index)}</span>
+                {item.codigo && (
+                  <div className="w-7 h-7 rounded-full bg-white text-black text-xs flex items-center justify-center font-bold flex-shrink-0">
+                    {item.codigo.slice(0, 3)}
+                  </div>
+                )}
+                <span className="text-sm font-semibold">{item.nome}</span>
+              </div>
+              <span className={`font-bold text-sm ${bateuMeta ? 'text-yellow-400' : 'text-green-400'}`}>
+                {item.percentual.toFixed(1)}%
+                {bateuMeta && ' 🏆'}
+              </span>
+            </div>
+
+            <div className="w-full h-6 bg-white/10 rounded-full relative overflow-hidden">
+              {bateuMeta && (
+                <motion.div
+                  initial={{ scale: 0 }}
+                  animate={{ scale: [1, 1.4, 1] }}
+                  transition={{ duration: 0.5 }}
+                  className="absolute inset-0 rounded-full bg-yellow-400/20 blur-xl"
+                />
+              )}
+
+              <motion.div
+                animate={{ width: `${Math.min(item.percentual, 100)}%` }}
+                transition={{ duration: 0.8 }}
+                className={`h-full bg-gradient-to-r ${
+                  index === 0
+                    ? 'from-yellow-400 to-orange-500'
+                    : index === 1
+                    ? 'from-slate-400 to-slate-300'
+                    : index === 2
+                    ? 'from-amber-700 to-amber-500'
+                    : 'from-purple-500 to-blue-500'
+                } ${bateuMeta ? 'shadow-[0_0_20px_rgba(255,215,0,0.6)] animate-pulse' : ''}`}
+              />
+
+              <motion.div
+                animate={{ left: `${Math.min(item.percentual, 98)}%` }}
+                transition={{ type: 'spring', stiffness: 80, damping: 12, mass: 0.8 }}
+                className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2"
+              >
+                <motion.span
+                  animate={{ scaleX: [-1, -1], rotate: [0, 8, -6, 4, 0], y: [0, -1, 1, -1, 0] }}
+                  transition={{ duration: 0.6, repeat: Infinity }}
+                  style={{ display: 'inline-block', scaleX: -1 }}
+                  className="text-lg drop-shadow-md"
+                >
+                  🚗
+                </motion.span>
+              </motion.div>
+
+              {bateuMeta && <div className="absolute right-2 top-1 text-sm">🏁</div>}
+            </div>
+          </motion.div>
+        )
+      })}
+    </div>
+  )
+}
 
 function lojaAvatar(loja) {
   if (loja.exibir_como === 'codigo' && loja.codigo) return loja.codigo.slice(0, 3).toUpperCase()
@@ -80,7 +230,7 @@ export default function DonoPage() {
   const [lojas,      setLojas]      = useState([])
   const [lojaData,   setLojaData]   = useState({})
   const [regionais,  setRegionais]  = useState([]) // [{ usuario, lojas: [] }]
-  const [visao,      setVisao]      = useState('lojas') // 'lojas' | 'regionais' | 'diaria' | 'anual'
+  const [visao,      setVisao]      = useState('lojas') // 'lojas' | 'regionais' | 'diaria' | 'anual' | 'guerra'
   const [loading,    setLoading]    = useState(true)
   const [vY, setVY] = useState(TODAY.getFullYear())
   const [vM, setVM] = useState(TODAY.getMonth())
@@ -232,115 +382,61 @@ export default function DonoPage() {
     return { l, i, score, vendas: d.totalVendas }
   }).sort((a, b) => b.score - a.score)
 
+  // Vendas hoje / ontem para insights
+  const todayKey     = toDateKey(TODAY)
+  const yesterdayKey = toDateKey(new Date(TODAY.getFullYear(), TODAY.getMonth(), TODAY.getDate() - 1))
+  const vendasHoje   = lojas.reduce((s, l) =>
+    s + (lojaData[l.id]?.lancamentos || []).filter(lc => lc.data === todayKey).reduce((ss, lc) => ss + (lc.vendas || 0), 0), 0)
+  const vendasOntem  = lojas.reduce((s, l) =>
+    s + (lojaData[l.id]?.lancamentos || []).filter(lc => lc.data === yesterdayKey).reduce((ss, lc) => ss + (lc.vendas || 0), 0), 0)
+
   if (loading) return (
-    <div className="min-h-screen flex items-center justify-center">
-      <div className="text-stone-400 text-sm">Carregando rede de lojas...</div>
+    <div className="min-h-screen bg-[#0b1220] flex items-center justify-center">
+      <div className="text-gray-400 text-sm">Carregando rede de lojas...</div>
     </div>
   )
 
   return (
-    <div className="min-h-screen bg-stone-100">
-      <NavBar usuario={usuario} titulo="Diretoria" subtitulo={`${lojas.length} loja${lojas.length !== 1 ? 's' : ''} ativa${lojas.length !== 1 ? 's' : ''}`} />
-
+    <div className="min-h-screen bg-[#0b1220]">
       <main className="max-w-6xl mx-auto px-4 py-5 space-y-5">
 
-        {/* KPIs */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {[
-            ['Vendas da Rede',  fmtR(kpi.vendas),  'no mês'],
-            ['Meta da Rede',    fmtR(kpi.meta),    'no mês'],
-            ['Atingimento',     fmtPct(kpiPct),    'rede geral'],
-            ['Vendedores',      kpi.vendedores,    'ativos'],
-          ].map(([l, v, s]) => (
-            <div key={l} className="card p-4 text-center">
-              <p className="text-xs text-stone-400">{l}</p>
-              <p className="text-xl font-extrabold text-stone-900 mt-0.5">{v}</p>
-              <p className="text-xs text-stone-400">{s}</p>
-            </div>
-          ))}
-        </div>
-
-        {/* Nav mês + toggle + ações */}
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          {visao !== 'anual' && (
-            <div className="flex items-center gap-3">
-              <button onClick={() => changeMonth(-1)} className="btn-secondary px-3 py-2 text-lg">‹</button>
-              <h2 className="text-lg font-bold text-stone-900">{MESES[vM]} {vY}</h2>
-              <button onClick={() => changeMonth(1)}  className="btn-secondary px-3 py-2 text-lg">›</button>
-            </div>
-          )}
-          {visao === 'anual' && <div />}
-          <div className="flex gap-2 flex-wrap">
-            <button onClick={() => setVisao('lojas')}
-              className={`px-4 py-1.5 rounded-lg text-sm border transition-all ${visao === 'lojas' ? 'bg-stone-900 text-white border-stone-900' : 'bg-white text-stone-600 border-stone-200 hover:bg-stone-50'}`}>
-              🏁 Corrida das Lojas
-            </button>
-            <button onClick={() => setVisao('regionais')}
-              className={`px-4 py-1.5 rounded-lg text-sm border transition-all ${visao === 'regionais' ? 'bg-stone-900 text-white border-stone-900' : 'bg-white text-stone-600 border-stone-200 hover:bg-stone-50'}`}>
-              🗺️ Por Regional
-            </button>
-            <button onClick={() => setVisao('diaria')}
-              className={`px-4 py-1.5 rounded-lg text-sm border transition-all ${visao === 'diaria' ? 'bg-stone-900 text-white border-stone-900' : 'bg-white text-stone-600 border-stone-200 hover:bg-stone-50'}`}>
-              📅 Corrida Diária
-            </button>
-            <button onClick={() => setVisao('anual')}
-              className={`px-4 py-1.5 rounded-lg text-sm border transition-all ${visao === 'anual' ? 'bg-stone-900 text-white border-stone-900' : 'bg-white text-stone-600 border-stone-200 hover:bg-stone-50'}`}>
-              📊 Evolução Anual
-            </button>
-          </div>
-        </div>
+        <HeaderAbsurdo
+          totalVendas={kpi.vendas}
+          metaTotal={kpi.meta}
+          atingimento={kpiPct}
+          vendedores={kpi.vendedores}
+          ranking={rankLojas.map(({ l, score }) => ({ id: l.id, nome: l.nome, percentual: score, totalVendas: lojaData[l.id]?.totalVendas || 0 }))}
+          mesLabel={`${MESES[vM]} ${vY}`}
+          vendasHoje={vendasHoje}
+          vendasOntem={vendasOntem}
+          visao={visao}
+          setVisao={setVisao}
+          onPrev={() => changeMonth(-1)}
+          onNext={() => changeMonth(1)}
+          onSair={() => router.replace('/')}
+        />
 
         {/* ── VISÃO: CORRIDA DAS LOJAS ── */}
         {visao === 'lojas' && (
           <>
-            <div className="card p-4">
-              <p className="section-title mb-4">Pista da Rede — {MESES[vM]} {vY}</p>
+            <div className="bg-[#0f172a] rounded-xl p-4 border border-white/10">
+              <p className="text-sm font-bold text-white/50 uppercase tracking-widest mb-4">Pista da Rede — {MESES[vM]} {vY}</p>
               <RaceTrack vendedores={lojasParaPista} scores={scoresLojas} semanas={4} />
             </div>
 
-            <div>
-              <p className="section-title">Desempenho das Lojas</p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 mt-3">
-                {rankLojas.map(({ l, i }) => (
-                  <LojaCard key={l.id} loja={l} dados={lojaData[l.id] || { lancamentos: [], metaLoja: null }} index={i} />
-                ))}
-              </div>
+            <div className="bg-[#0f172a] rounded-xl p-5">
+              <p className="text-sm font-bold text-white/50 uppercase tracking-widest mb-1">Desempenho das Lojas</p>
+              <CardsDesempenho
+                ranking={rankLojas.map(({ l, score }) => ({ id: l.id, nome: l.nome, percentual: score }))}
+                lojaData={lojaData}
+              />
             </div>
 
-            <div className="card p-4">
-              <p className="section-title">Classificação das Lojas</p>
-              <div className="space-y-2 mt-3">
-                {rankLojas.map(({ l, i, score, vendas }, r) => {
-                  const c = getCor(i)
-                  return (
-                    <div key={l.id} className="flex items-center gap-3 py-2 border-b border-stone-100 last:border-0">
-                      <span className="text-lg min-w-[24px]">{MEDALS[r] || `${r + 1}º`}</span>
-                      <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
-                        style={{ background: c.bg, color: c.border }}>
-                        {lojaAvatar(l)}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-stone-900 truncate">{l.nome}</p>
-                        <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5">
-                          {(lojaData[l.id]?.gerentes || []).map(g => (
-                            <span key={g.id} className="text-xs text-indigo-600 font-medium">👤 {g.nome}</span>
-                          ))}
-                          {(lojaData[l.id]?.supervisores || []).map(s => (
-                            <span key={s.id} className="text-xs text-emerald-600 font-medium">⭐ {s.nome}</span>
-                          ))}
-                          {!lojaData[l.id]?.gerentes?.length && !lojaData[l.id]?.supervisores?.length && l.cidade && (
-                            <span className="text-xs text-stone-400">{l.cidade}</span>
-                          )}
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-base font-extrabold" style={{ color: c.border }}>{score.toFixed(1)}%</p>
-                        <p className="text-xs text-stone-400">{fmtR(vendas)}</p>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
+            <div className="bg-[#0f172a] rounded-xl p-5">
+              <RankingAbsurdo
+                ranking={rankLojas.map(({ l, score }) => ({ id: l.id, nome: l.nome, percentual: score }))}
+                lojaData={lojaData}
+              />
             </div>
           </>
         )}
@@ -367,28 +463,28 @@ export default function DonoPage() {
 
           return (
             <div className="space-y-4">
-              <div className="card p-4">
-                <p className="section-title mb-4">Pista das Coordenadoras — {MESES[vM]} {vY}</p>
+              <div className="bg-[#0f172a] rounded-xl p-4 border border-white/10">
+                <p className="text-sm font-bold text-white/50 uppercase tracking-widest mb-4">Pista das Coordenadoras — {MESES[vM]} {vY}</p>
                 {regionais.length === 0
-                  ? <div className="text-sm text-stone-400 text-center py-8">Nenhuma coordenadora cadastrada.</div>
+                  ? <div className="text-sm text-gray-400 text-center py-8">Nenhuma coordenadora cadastrada.</div>
                   : <RaceTrack vendedores={coordsParaPista} scores={scoresCoords} semanas={4} />
                 }
               </div>
 
-              <div className="card p-4">
-                <p className="section-title mb-3">Classificação das Coordenadoras</p>
+              <div className="bg-[#0f172a] rounded-xl p-4 border border-white/10">
+                <p className="text-sm font-bold text-white/50 uppercase tracking-widest mb-3">Classificação das Coordenadoras</p>
                 <div className="space-y-2">
                   {rankCoords.map(({ reg, lojasReg, totalVendas, pct }, r) => (
-                    <div key={reg.usuario?.id || r} className="flex items-center gap-3 py-2 border-b border-stone-100 last:border-0">
+                    <div key={reg.usuario?.id || r} className="flex items-center gap-3 py-2 border-b border-white/10 last:border-0">
                       <span className="text-lg min-w-[24px]">{MEDALS[r] || `${r + 1}º`}</span>
                       <Avatar nome={reg.usuario?.nome || 'R'} fotoUrl={reg.usuario?.foto_url || null} index={r} size={32} />
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-stone-900">{reg.usuario?.nome || 'Regional'}</p>
-                        <p className="text-xs text-stone-400">{lojasReg.length} loja{lojasReg.length !== 1 ? 's' : ''}</p>
+                        <p className="text-sm font-semibold text-white">{reg.usuario?.nome || 'Regional'}</p>
+                        <p className="text-xs text-gray-400">{lojasReg.length} loja{lojasReg.length !== 1 ? 's' : ''}</p>
                       </div>
                       <div className="text-right">
-                        <p className="text-base font-extrabold text-stone-900">{fmtPct(pct)}</p>
-                        <p className="text-xs text-stone-400">{fmtR(totalVendas)}</p>
+                        <p className="text-base font-extrabold text-white">{fmtPct(pct)}</p>
+                        <p className="text-xs text-gray-400">{fmtR(totalVendas)}</p>
                       </div>
                     </div>
                   ))}
@@ -437,7 +533,7 @@ export default function DonoPage() {
                   const act = selDs.includes(d.key)
                   return (
                     <button key={d.key} onClick={() => toggleDia(d.key)}
-                      className={`relative px-3 py-1.5 rounded-lg text-sm border transition-all ${act ? 'bg-stone-900 text-white border-stone-900' : 'bg-white text-stone-600 border-stone-200 hover:bg-stone-50'}`}>
+                      className={`relative px-3 py-1.5 rounded-lg text-sm border transition-all ${act ? 'bg-white text-black border-white' : 'bg-white/10 text-gray-300 border-white/10 hover:bg-white/20'}`}>
                       {String(d.date.getDate()).padStart(2, '0')}/{String(vM + 1).padStart(2, '0')}
                       {isT && <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-blue-500" />}
                       {has && !isT && <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-green-500" />}
@@ -447,14 +543,14 @@ export default function DonoPage() {
               </div>
 
               {/* Pista */}
-              <div className="card p-4">
-                <p className="section-title mb-4">Pista — {tituloSel}</p>
+              <div className="bg-[#0f172a] rounded-xl p-4 border border-white/10">
+                <p className="text-sm font-bold text-white/50 uppercase tracking-widest mb-4">Pista — {tituloSel}</p>
                 <RaceTrack vendedores={lojasParaPista} scores={scoresDia} semanas={0} />
               </div>
 
               {/* Cards do dia */}
               <div>
-                <p className="section-title">Vendas {selDs.length > 1 ? `(${selDs.length} dias)` : 'do Dia'} por Loja</p>
+                <p className="text-sm font-bold text-white/50 uppercase tracking-widest mb-3">Vendas {selDs.length > 1 ? `(${selDs.length} dias)` : 'do Dia'} por Loja</p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 mt-3">
                   {[...lojas]
                     .map((l, i) => ({ l, i, sc: scoresDia[l.id] || { score: 0, vendas: 0 } }))
@@ -462,35 +558,35 @@ export default function DonoPage() {
                     .map(({ l, i, sc }, r) => {
                       const c = getCor(i)
                       return (
-                        <div key={l.id} className="card p-4">
+                        <div key={l.id} className="bg-[#0f172a] rounded-xl p-4 border border-white/10">
                           <div className="flex items-center gap-2.5 mb-3">
                             <div className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0"
                               style={{ background: c.bg, color: c.border }}>
                               {lojaAvatar(l)}
                             </div>
                             <div className="flex-1 min-w-0">
-                              <p className="font-semibold text-sm text-stone-900 truncate">{l.nome}</p>
-                              {l.cidade && <p className="text-xs text-stone-400">{l.cidade}</p>}
+                              <p className="font-semibold text-sm text-white truncate">{l.nome}</p>
+                              {l.cidade && <p className="text-xs text-gray-400">{l.cidade}</p>}
                             </div>
                             <p className="text-lg font-extrabold" style={{ color: c.border }}>{MEDALS[r] || `${r+1}º`}</p>
                           </div>
                           {sc.vendas > 0 ? (
                             <div className="space-y-1">
                               <div className="flex justify-between text-xs">
-                                <span className="text-stone-400">Vendas</span>
-                                <span className="font-bold text-stone-800">{fmtR(sc.vendas)}</span>
+                                <span className="text-gray-400">Vendas</span>
+                                <span className="font-bold text-white">{fmtR(sc.vendas)}</span>
                               </div>
                               <div className="flex justify-between text-xs">
-                                <span className="text-stone-400">Atendimentos</span>
-                                <span className="font-bold text-stone-800">{sc.atendimentos}</span>
+                                <span className="text-gray-400">Atendimentos</span>
+                                <span className="font-bold text-white">{sc.atendimentos}</span>
                               </div>
                               <div className="flex justify-between text-xs">
-                                <span className="text-stone-400">Peças</span>
-                                <span className="font-bold text-stone-800">{sc.pecas}</span>
+                                <span className="text-gray-400">Peças</span>
+                                <span className="font-bold text-white">{sc.pecas}</span>
                               </div>
                             </div>
                           ) : (
-                            <p className="text-xs text-stone-400">Nenhum lançamento neste dia.</p>
+                            <p className="text-xs text-gray-400">Nenhum lançamento neste dia.</p>
                           )}
                         </div>
                       )
@@ -518,12 +614,12 @@ export default function DonoPage() {
             <>
               {/* Seletor multiselect de anos */}
               <div className="flex flex-wrap items-center gap-2">
-                <span className="text-xs text-stone-400 font-medium">Comparar anos:</span>
+                <span className="text-xs text-gray-400 font-medium">Comparar anos:</span>
                 {anosDisponiveis.map((ano, ai) => {
                   const sel = anossel.includes(ano)
                   return (
                     <button key={ano} onClick={() => toggleAno(ano)}
-                      className={`px-4 py-1.5 rounded-lg text-sm border font-semibold transition-all ${sel ? 'text-white' : 'bg-white text-stone-500 border-stone-200 hover:bg-stone-50'}`}
+                      className={`px-4 py-1.5 rounded-lg text-sm border font-semibold transition-all ${sel ? 'text-white' : 'bg-white/10 text-gray-300 border-white/10 hover:bg-white/20'}`}
                       style={sel ? { background: coresAnos[ai], borderColor: coresAnos[ai] } : {}}>
                       {ano}
                     </button>
@@ -532,8 +628,8 @@ export default function DonoPage() {
               </div>
 
               {/* Barras mensais comparativas */}
-              <div className="card p-4">
-                <p className="section-title mb-4">Vendas por Mês — {anossel.join(' vs ')}</p>
+              <div className="bg-[#0f172a] rounded-xl p-4 border border-white/10">
+                <p className="text-sm font-bold text-white/50 uppercase tracking-widest mb-4">Vendas por Mês — {anossel.join(' vs ')}</p>
                 <div className="space-y-4">
                   {MESES.map((nomeMes, mi) => {
                     const mes = mi + 1
@@ -542,7 +638,7 @@ export default function DonoPage() {
                     return (
                       <div key={mes} className={allFut ? 'opacity-30' : ''}>
                         <div className="flex items-center justify-between text-xs mb-1.5">
-                          <span className={`font-medium w-20 ${isCur ? 'text-blue-600 font-bold' : 'text-stone-600'}`}>
+                          <span className={`font-medium w-20 ${isCur ? 'text-blue-400 font-bold' : 'text-gray-400'}`}>
                             {nomeMes} {isCur && '●'}
                           </span>
                           <div className="flex gap-4">
@@ -564,7 +660,7 @@ export default function DonoPage() {
                             const pct = d.meta > 0 ? Math.min(d.vendas / d.meta * 100, 100) : 0
                             const cor = coresAnos[anosDisponiveis.indexOf(ano)]
                             return (
-                              <div key={ano} className="h-2.5 bg-stone-100 rounded-full overflow-hidden">
+                              <div key={ano} className="h-2.5 bg-white/10 rounded-full overflow-hidden">
                                 <div className="h-full rounded-full transition-all duration-700"
                                   style={{ width: `${pct}%`, background: cor }} />
                               </div>
@@ -578,8 +674,8 @@ export default function DonoPage() {
               </div>
 
               {/* Tabela comparativa por loja */}
-              <div className="card p-4">
-                <p className="section-title mb-4">Atingimento por Loja e Mês</p>
+              <div className="bg-[#0f172a] rounded-xl p-4 border border-white/10">
+                <p className="text-sm font-bold text-white/50 uppercase tracking-widest mb-4">Atingimento por Loja e Mês</p>
                 {anossel.map((ano) => {
                   const cor = coresAnos[anosDisponiveis.indexOf(ano)]
                   const totalAno = lojas.reduce((s, l) => s + Object.values(dadosAnual[ano] || {}).reduce((ss, m) => ss + (m.porLoja?.[l.id]?.vendas || 0), 0), 0)
@@ -592,10 +688,10 @@ export default function DonoPage() {
                       <div className="overflow-x-auto">
                         <table className="w-full text-xs">
                           <thead>
-                            <tr className="text-left text-stone-400 border-b border-stone-100">
+                            <tr className="text-left text-gray-400 border-b border-white/10">
                               <th className="pb-1.5 font-medium pr-4">Loja</th>
                               {MESES.map((m, i) => (
-                                <th key={i} className={`pb-1.5 font-medium text-center px-1 ${i === TODAY.getMonth() && ano === TODAY.getFullYear() ? 'text-blue-600' : ''}`}>
+                                <th key={i} className={`pb-1.5 font-medium text-center px-1 ${i === TODAY.getMonth() && ano === TODAY.getFullYear() ? 'text-blue-400' : ''}`}>
                                   {m.slice(0, 3)}
                                 </th>
                               ))}
@@ -607,7 +703,7 @@ export default function DonoPage() {
                               const c = getCor(li)
                               const totalLoja = Object.values(dadosAnual[ano] || {}).reduce((s, m) => s + (m.porLoja?.[loja.id]?.vendas || 0), 0)
                               return (
-                                <tr key={loja.id} className="border-b border-stone-50 last:border-0">
+                                <tr key={loja.id} className="border-b border-white/5 last:border-0">
                                   <td className="py-1.5 pr-4 font-semibold truncate max-w-[80px]" style={{ color: c.border }}>{loja.nome}</td>
                                   {MESES.map((_, mi) => {
                                     const mes = mi + 1
@@ -616,14 +712,14 @@ export default function DonoPage() {
                                     const p   = m > 0 ? v / m * 100 : 0
                                     const fut = ano === TODAY.getFullYear() && mi > TODAY.getMonth()
                                     return (
-                                      <td key={mi} className={`py-1.5 text-center px-1 ${fut ? 'text-stone-200' : ''}`}>
+                                      <td key={mi} className={`py-1.5 text-center px-1 ${fut ? 'text-white/20' : ''}`}>
                                         {v > 0
-                                          ? <span className={`font-bold ${p >= 100 ? 'text-green-600' : p >= 80 ? 'text-amber-600' : 'text-stone-600'}`}>{fmtPct(p)}</span>
-                                          : <span className="text-stone-300">—</span>}
+                                          ? <span className={`font-bold ${p >= 100 ? 'text-green-400' : p >= 80 ? 'text-amber-400' : 'text-gray-300'}`}>{fmtPct(p)}</span>
+                                          : <span className="text-white/20">—</span>}
                                       </td>
                                     )
                                   })}
-                                  <td className="py-1.5 text-right pl-2 font-bold text-stone-800">{fmtR(totalLoja)}</td>
+                                  <td className="py-1.5 text-right pl-2 font-bold text-white">{fmtR(totalLoja)}</td>
                                 </tr>
                               )
                             })}
@@ -637,6 +733,11 @@ export default function DonoPage() {
             </>
           )
         })()}
+
+        {/* ── VISÃO: SALA DE GUERRA ── */}
+        {visao === 'guerra' && (
+          <SalaDeGuerra lojas={lojas} lojaData={lojaData} supabase={supabase} />
+        )}
 
       </main>
 

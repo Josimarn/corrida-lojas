@@ -1,7 +1,7 @@
 {
-  "/page": "app/page.js",
-  "/admin/page": "app/admin/page.js",
   "/gerente/page": "app/gerente/page.js",
-  "/super-admin/page": "app/super-admin/page.js",
-  "/dono/page": "app/dono/page.js"
+  "/gerente/tv/page": "app/gerente/tv/page.js",
+  "/dashboard/page": "app/dashboard/page.js",
+  "/dono/page": "app/dono/page.js",
+  "/vendedor/page": "app/vendedor/page.js"
 }

@@ -1,14 +1,97 @@
 'use client'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase-browser'
 import NavBar from '@/components/NavBar'
 import RaceTrack from '@/components/RaceTrack'
 import ScoreCard from '@/components/ScoreCard'
+import CardsDesempenho from '@/components/CardsDesempenho'
+import RankingAbsurdo from '@/components/RankingAbsurdo'
+import { motion, AnimatePresence } from 'framer-motion'
+import Link from 'next/link'
 import {
   getWeeksOfMonth, getMonthDateKeys, toDateKey, calcScore, aggregateLancamentos,
   fmtR, fmtPct, MESES, MEDALS, getCor, getWeekNumber, applyWeekPos
 } from '@/lib/helpers'
+
+function SalaDeGuerra({ lojas, lojaData, supabase }) {
+  const audioRef = useRef(null)
+  const [alerta, setAlerta] = useState(null)
+  const [liderAtual, setLiderAtual] = useState(null)
+
+  function tocarSom() {
+    if (audioRef.current) { audioRef.current.currentTime = 0; audioRef.current.play().catch(() => {}) }
+  }
+
+  const ranking = [...lojas].map(loja => {
+    const d = lojaData[loja.id] || { lancamentos: [], metaLoja: null }
+    const totalVendas = d.lancamentos.reduce((s, l) => s + (l.vendas || 0), 0)
+    const percentual  = d.metaLoja?.meta_total > 0 ? Math.round(totalVendas / d.metaLoja.meta_total * 1000) / 10 : 0
+    return { id: loja.id, nome: loja.nome, codigo: loja.codigo, percentual }
+  }).sort((a, b) => b.percentual - a.percentual)
+
+  useEffect(() => {
+    if (!ranking.length) return
+    const novoLider = ranking[0]
+    if (liderAtual && liderAtual.id !== novoLider.id) {
+      setAlerta(`🚨 ${novoLider.nome} assumiu a liderança!`)
+      tocarSom()
+      setTimeout(() => setAlerta(null), 3000)
+    }
+    setLiderAtual(novoLider)
+  }, [lojaData])
+
+  useEffect(() => {
+    const channel = supabase.channel('guerra-sup')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'lancamentos' }, () => tocarSom())
+      .subscribe()
+    return () => supabase.removeChannel(channel)
+  }, [supabase])
+
+  return (
+    <div className="bg-[#0f172a] rounded-xl p-6 shadow-xl space-y-4 relative text-white">
+      <audio ref={audioRef} src="/som.mp3" preload="none" />
+      <AnimatePresence>
+        {alerta && (
+          <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+            className="absolute top-4 left-1/2 -translate-x-1/2 bg-red-500 text-white px-5 py-2 rounded-lg shadow-lg z-50 text-sm font-semibold whitespace-nowrap">
+            {alerta}
+          </motion.div>
+        )}
+      </AnimatePresence>
+      <h2 className="text-lg font-bold flex items-center gap-2">
+        ⚔️ Sala de Guerra — Ranking ao Vivo
+        <span className="text-xs font-normal text-white/40 ml-1">tempo real</span>
+      </h2>
+      {ranking.map((item, index) => {
+        const bateuMeta = item.percentual >= 100
+        return (
+          <motion.div key={item.id} layout className={`p-3 rounded-lg transition-all ${index === 0 ? 'bg-yellow-500/10 border border-yellow-400/30' : 'bg-white/5 border border-white/10'}`}>
+            <div className="flex justify-between items-center mb-2">
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-white/40 w-4">{index + 1}</span>
+                <span className="text-lg">{['🥇','🥈','🥉'][index] ?? null}</span>
+                {item.codigo && <div className="w-7 h-7 rounded-full bg-white text-black text-xs flex items-center justify-center font-bold">{String(item.codigo).slice(0,3)}</div>}
+                <span className="text-sm font-semibold">{item.nome}</span>
+              </div>
+              <span className={`font-bold text-sm ${bateuMeta ? 'text-yellow-400' : 'text-green-400'}`}>{item.percentual.toFixed(1)}%{bateuMeta && ' 🏆'}</span>
+            </div>
+            <div className="w-full h-6 bg-white/10 rounded-full relative overflow-hidden">
+              <motion.div animate={{ width: `${Math.min(item.percentual, 100)}%` }} transition={{ duration: 0.8 }}
+                className={`h-full bg-gradient-to-r ${index === 0 ? 'from-yellow-400 to-orange-500' : index === 1 ? 'from-slate-400 to-slate-300' : index === 2 ? 'from-amber-700 to-amber-500' : 'from-purple-500 to-blue-500'} ${bateuMeta ? 'animate-pulse' : ''}`} />
+              <motion.div animate={{ left: `${Math.min(item.percentual, 98)}%` }} transition={{ type: 'spring', stiffness: 80, damping: 12, mass: 0.8 }}
+                className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2">
+                <motion.span animate={{ scaleX: [-1,-1], rotate: [0,8,-6,4,0], y: [0,-1,1,-1,0] }} transition={{ duration: 0.6, repeat: Infinity }}
+                  style={{ display: 'inline-block', scaleX: -1 }} className="text-lg">🚗</motion.span>
+              </motion.div>
+              {bateuMeta && <div className="absolute right-2 top-1 text-sm">🏁</div>}
+            </div>
+          </motion.div>
+        )
+      })}
+    </div>
+  )
+}
 
 function LojaCard({ loja, dados, index }) {
   const c = getCor(index)
@@ -85,7 +168,7 @@ export default function SupervisorPage() {
   const [lojas,    setLojas]    = useState([])
   const [lojaData, setLojaData] = useState({})
   const [selLoja,  setSelLoja]  = useState(null)
-  const [visao,    setVisao]    = useState('lojas') // 'lojas' | 'vendedores' | 'diaria' | 'anual'
+  const [visao,    setVisao]    = useState('lojas') // 'lojas' | 'vendedores' | 'diaria' | 'anual' | 'guerra'
   const [loading,  setLoading]  = useState(true)
   const [vY, setVY] = useState(TODAY.getFullYear())
   const [vM, setVM] = useState(TODAY.getMonth())
@@ -245,6 +328,14 @@ export default function SupervisorPage() {
                 {label}
               </button>
             ))}
+            <button onClick={() => setVisao('guerra')}
+              className={`px-4 py-1.5 rounded-lg text-sm border transition-all ${visao === 'guerra' ? 'bg-red-600 text-white border-red-600' : 'bg-white text-stone-600 border-stone-200 hover:bg-stone-50'}`}>
+              ⚔️ Sala de Guerra
+            </button>
+            <Link href="/supervisor/tv" target="_blank"
+              className="px-4 py-1.5 rounded-lg text-sm border transition-all bg-white text-stone-600 border-stone-200 hover:bg-stone-50">
+              📺 TV
+            </Link>
           </div>
         </div>
 
@@ -256,49 +347,32 @@ export default function SupervisorPage() {
               <RaceTrack vendedores={lojasParaPista} scores={scoresLojas} semanas={4} />
             </div>
 
-            <div>
-              <p className="section-title">Desempenho das Lojas</p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 mt-3">
-                {lojas.map((loja, i) => (
-                  <LojaCard key={loja.id} loja={loja} dados={lojaData[loja.id] || { lancamentos: [], metaLoja: null }} index={i} />
-                ))}
-              </div>
-            </div>
+            {(() => {
+              const rankLojas = [...lojas].map(loja => {
+                const d = lojaData[loja.id] || { lancamentos: [], metaLoja: null }
+                const totalVendas = d.lancamentos.reduce((s, l) => s + (l.vendas || 0), 0)
+                const score = d.metaLoja?.meta_total > 0 ? Math.round(totalVendas / d.metaLoja.meta_total * 1000) / 10 : 0
+                return { id: loja.id, nome: loja.nome, percentual: score }
+              }).sort((a, b) => b.percentual - a.percentual)
 
-            <div className="card p-4">
-              <p className="section-title">Classificação das Lojas</p>
-              <div className="space-y-2 mt-3">
-                {[...lojas]
-                  .map((loja, i) => {
-                    const d     = lojaData[loja.id] || { lancamentos: [] }
-                    const total = d.lancamentos.reduce((s, l) => s + (l.vendas || 0), 0)
-                    const meta  = d.metaLoja?.meta_total || 0
-                    const score = meta > 0 ? Math.round(total / meta * 1000) / 10 : 0
-                    return { loja, i, total, score }
-                  })
-                  .sort((a, b) => b.score - a.score)
-                  .map(({ loja, i, total, score }, r) => {
-                    const c = getCor(i)
-                    return (
-                      <div key={loja.id} className="flex items-center gap-3 py-2 border-b border-stone-100 last:border-0">
-                        <span className="text-lg min-w-[24px]">{MEDALS[r] || `${r + 1}º`}</span>
-                        <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
-                          style={{ background: c.bg, color: c.border }}>
-                          {loja.nome.split(' ').map(w => w[0]).join('').slice(0, 2)}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-semibold text-stone-900 truncate">{loja.nome}</p>
-                          {loja.cidade && <p className="text-xs text-stone-400">{loja.cidade}</p>}
-                        </div>
-                        <div className="text-right">
-                          <p className="text-base font-extrabold" style={{ color: c.border }}>{score.toFixed(1)}%</p>
-                          <p className="text-xs text-stone-400">{fmtR(total)}</p>
-                        </div>
-                      </div>
-                    )
-                  })}
-              </div>
-            </div>
+              const lojaDataEnriquecido = {}
+              lojas.forEach(loja => {
+                const d = lojaData[loja.id] || { lancamentos: [], metaLoja: null }
+                lojaDataEnriquecido[loja.id] = { ...d, totalVendas: d.lancamentos.reduce((s, l) => s + (l.vendas || 0), 0) }
+              })
+
+              return (
+                <>
+                  <div className="bg-[#0f172a] rounded-xl p-5">
+                    <p className="text-sm font-bold text-white/50 uppercase tracking-widest mb-1">Desempenho das Lojas</p>
+                    <CardsDesempenho ranking={rankLojas} lojaData={lojaDataEnriquecido} />
+                  </div>
+                  <div className="bg-[#0f172a] rounded-xl p-5">
+                    <RankingAbsurdo ranking={rankLojas} lojaData={lojaDataEnriquecido} />
+                  </div>
+                </>
+              )
+            })()}
           </>
         )}
 
@@ -577,6 +651,11 @@ export default function SupervisorPage() {
             </>
           )
         })()}
+
+        {/* ── VISÃO: SALA DE GUERRA ── */}
+        {visao === 'guerra' && (
+          <SalaDeGuerra lojas={lojas} lojaData={lojaData} supabase={supabase} />
+        )}
 
       </main>
     </div>

@@ -30,6 +30,9 @@ import NavBar from '@/components/NavBar'
 import RaceTrack from '@/components/RaceTrack'
 import ScoreCard from '@/components/ScoreCard'
 import Avatar from '@/components/Avatar'
+import RankingAbsurdo from '@/components/RankingAbsurdo'
+import { motion, AnimatePresence } from 'framer-motion'
+import Link from 'next/link'
 import {
   getWeeksOfMonth, getMonthDateKeys, toDateKey, calcScore, aggregateLancamentos,
   fmtR, fmtPct, MESES, MEDALS, getCor, getWeekNumber, applyWeekPos
@@ -49,7 +52,8 @@ export default function GerentePage() {
   const [lancamentos,setLancamentos]= useState([])
   const [loading,    setLoading]    = useState(true)
   const [visaoConsol,setVisaoConsol]= useState(false)
-  const [visao,      setVisao]      = useState('mes') // 'mes' | 'vendas' | 'diaria' | 'anual'
+  const [visao,      setVisao]      = useState('mes') // 'mes' | 'vendas' | 'diaria' | 'anual' | 'guerra'
+  const [guerraAlerta, setGuerraAlerta] = useState(null)
   const [anossel,    setAnosSel]    = useState([TODAY.getFullYear()])
   const [dadosAnual, setDadosAnual] = useState({})
 
@@ -521,6 +525,14 @@ export default function GerentePage() {
               className={`px-3 py-1.5 rounded-lg text-xs border transition-all ${visao === 'vendas' ? 'bg-stone-900 text-white border-stone-900' : 'bg-white text-stone-600 border-stone-200 hover:bg-stone-50'}`}>
               💰 Vendas
             </button>
+            <button onClick={() => setVisao('guerra')}
+              className={`px-3 py-1.5 rounded-lg text-xs border transition-all ${visao === 'guerra' ? 'bg-red-600 text-white border-red-600' : 'bg-white text-stone-600 border-stone-200 hover:bg-stone-50'}`}>
+              ⚔️ Guerra
+            </button>
+            <Link href="/gerente/tv" target="_blank"
+              className="px-3 py-1.5 rounded-lg text-xs border transition-all bg-white text-stone-600 border-stone-200 hover:bg-stone-50">
+              📺 TV
+            </Link>
             <button onClick={abrirModalMetas} className="btn-warning text-xs">⚙ Metas</button>
             <button onClick={abrirModalEquipe} className="btn-info text-xs">👥 Equipe</button>
           </div>
@@ -559,34 +571,20 @@ export default function GerentePage() {
         {visao === 'mes' && <>
 
         {/* Classificação do Mês */}
-        <div className="card p-4">
-          <p className="section-title">Classificação do Mês</p>
-          <div className="space-y-2">
-            {[...vendedores]
-              .map((v, i) => ({ v, i, score: scores[v.id]?.scoreDisplay || 0 }))
-              .sort((a, b) => b.score - a.score)
-              .map(({ v, i, score }, r) => {
-                const c = getCor(i)
-                return (
-                  <div key={v.id} className="flex items-center gap-3 py-2 border-b border-stone-100 last:border-0">
-                    <span className="text-lg min-w-[24px]">{MEDALS[r] || `${r + 1}º`}</span>
-                    <Avatar nome={v.nome} fotoUrl={v.foto_url} index={i} size={28} />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-stone-900 truncate">{v.nome}</p>
-                    </div>
-                    <div className="flex items-center gap-4 text-right flex-shrink-0">
-                      <div className="hidden sm:block text-xs text-stone-500">
-                        {fmtR(scores[v.id]?.stats?.vendas)}
-                      </div>
-                      <div className="text-base font-extrabold" style={{ color: c.border, minWidth: 52 }}>
-                        {score.toFixed(1)}%
-                      </div>
-                    </div>
-                  </div>
-                )
-              })}
-          </div>
-        </div>
+        {(() => {
+          const rankVendedores = [...vendedores]
+            .map((v, i) => ({ id: v.id, nome: v.nome, percentual: scores[v.id]?.scoreDisplay || 0 }))
+            .sort((a, b) => b.percentual - a.percentual)
+          const lojaDataVend = {}
+          vendedores.forEach(v => {
+            lojaDataVend[v.id] = { lancamentos: lancamentos.filter(l => l.vendedor_id === v.id), metaLoja: null, totalVendas: lancamentos.filter(l => l.vendedor_id === v.id).reduce((s, l) => s + (l.vendas || 0), 0) }
+          })
+          return (
+            <div className="bg-[#0f172a] rounded-xl p-5">
+              <RankingAbsurdo ranking={rankVendedores} lojaData={lojaDataVend} />
+            </div>
+          )
+        })()}
 
         <div>
           <p className="section-title">Desempenho no Mês</p>
@@ -919,6 +917,46 @@ export default function GerentePage() {
                 })}
               </div>
             </>
+          )
+        })()}
+
+        {/* ── VISÃO: SALA DE GUERRA ── */}
+        {visao === 'guerra' && (() => {
+          const ranking = [...vendedores]
+            .map((v, i) => ({ id: v.id, nome: v.nome, codigo: null, percentual: scores[v.id]?.scoreDisplay || 0 }))
+            .sort((a, b) => b.percentual - a.percentual)
+          return (
+            <div className="bg-[#0f172a] rounded-xl p-6 shadow-xl space-y-4 relative text-white">
+              <h2 className="text-lg font-bold flex items-center gap-2">
+                ⚔️ Sala de Guerra — {loja?.nome}
+                <span className="text-xs font-normal text-white/40 ml-1">ranking ao vivo</span>
+              </h2>
+              {ranking.map((item, index) => {
+                const bateuMeta = item.percentual >= 100
+                return (
+                  <motion.div key={item.id} layout className={`p-3 rounded-lg transition-all ${index === 0 ? 'bg-yellow-500/10 border border-yellow-400/30' : 'bg-white/5 border border-white/10'}`}>
+                    <div className="flex justify-between items-center mb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-white/40 w-4">{index + 1}</span>
+                        <span className="text-lg">{['🥇','🥈','🥉'][index] ?? null}</span>
+                        <span className="text-sm font-semibold">{item.nome}</span>
+                      </div>
+                      <span className={`font-bold text-sm ${bateuMeta ? 'text-yellow-400' : 'text-green-400'}`}>{item.percentual.toFixed(1)}%{bateuMeta && ' 🏆'}</span>
+                    </div>
+                    <div className="w-full h-6 bg-white/10 rounded-full relative overflow-hidden">
+                      <motion.div animate={{ width: `${Math.min(item.percentual, 100)}%` }} transition={{ duration: 0.8 }}
+                        className={`h-full bg-gradient-to-r ${index === 0 ? 'from-yellow-400 to-orange-500' : index === 1 ? 'from-slate-400 to-slate-300' : index === 2 ? 'from-amber-700 to-amber-500' : 'from-purple-500 to-blue-500'}`} />
+                      <motion.div animate={{ left: `${Math.min(item.percentual, 98)}%` }} transition={{ type: 'spring', stiffness: 80, damping: 12 }}
+                        className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2">
+                        <motion.span animate={{ scaleX: [-1,-1], rotate: [0,8,-6,4,0] }} transition={{ duration: 0.6, repeat: Infinity }}
+                          style={{ display: 'inline-block', scaleX: -1 }} className="text-lg">🚗</motion.span>
+                      </motion.div>
+                      {bateuMeta && <div className="absolute right-2 top-1 text-sm">🏁</div>}
+                    </div>
+                  </motion.div>
+                )
+              })}
+            </div>
           )
         })()}
 

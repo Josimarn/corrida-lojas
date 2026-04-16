@@ -1,133 +1,182 @@
 'use client'
-import Avatar from './Avatar'
-import { getCor, fmtPct } from '@/lib/helpers'
 
-export default function RaceTrack({ vendedores, scores, semanas = 4 }) {
-  if (!vendedores?.length) return (
+import { motion } from 'framer-motion'
+import { fmtPct } from '@/lib/helpers'
+
+// Aceita duas APIs:
+// Nova: <RaceTrack ranking={[{ id, nome, codigo, percentual }]} />
+// Antiga: <RaceTrack vendedores={[...]} scores={{ [id]: { score, scoreDisplay } }} semanas={4} />
+export default function RaceTrack({ ranking: rankingProp, vendedores, scores, semanas = 4 }) {
+
+  // Normaliza para o formato { id, nome, codigo, percentual }
+  const ranking = rankingProp
+    ? rankingProp
+    : (vendedores || [])
+        .map(v => {
+          const sc = scores?.[v.id] || { score: 0, scoreDisplay: 0 }
+          return {
+            id: v.id,
+            nome: v.nome,
+            codigo: v.label || null,
+            percentual: sc.scoreDisplay ?? sc.score,
+          }
+        })
+        .sort((a, b) => b.percentual - a.percentual)
+
+  if (!ranking.length) return (
     <div className="text-sm text-stone-400 text-center py-8">
-      Nenhum vendedor cadastrado nesta loja.
+      Nenhum dado disponível.
     </div>
   )
 
-  // Ordena pelo score real (scoreDisplay), não pelo score limitado à semana
-  const ordenados = [...vendedores].sort((a, b) => {
-    const sa = scores?.[a.id]?.scoreDisplay ?? scores?.[a.id]?.score ?? 0
-    const sb = scores?.[b.id]?.scoreDisplay ?? scores?.[b.id]?.score ?? 0
-    return sb - sa
-  })
+  const lider = ranking[0]
 
   return (
-    <div className="rounded-xl overflow-hidden" style={{ background: '#1a1a2e' }}>
-      {/* Header da pista */}
-      <div className="flex items-center justify-between px-4 py-2 border-b border-white/10">
-        <span className="text-xs font-bold text-white/50 uppercase tracking-widest">Pista</span>
-        <div className="flex gap-4 text-xs text-white/40">
-          {semanas > 0 && Array.from({ length: semanas }, (_, i) => (
-            <span key={i}>Sem {i + 1}</span>
-          ))}
+    <div className="bg-[#0b1220] rounded-xl p-5 text-white relative overflow-hidden">
+
+      {/* HEADER INTELIGENTE */}
+      <div className="mb-4 text-sm text-gray-300">
+        🏁 Líder: <span className="text-yellow-400 font-bold">{lider?.nome}</span>
+        {ranking[1] && <> · 🔥 Destaque: {ranking[1].nome}</>}
+        {ranking.filter(r => r.percentual < 50).length > 0 && (
+          <> · ⚠️ Abaixo de 50%: {ranking.filter(r => r.percentual < 50).length}</>
+        )}
+      </div>
+
+      {/* GRID SEMANAS */}
+      {semanas > 0 && (
+        <div className="grid grid-cols-12 text-xs text-gray-400 mb-2">
+          <div className="col-span-2" />
+          <div className="col-span-10 grid grid-cols-4 text-center">
+            {Array.from({ length: semanas }, (_, i) => (
+              <span key={i}>Sem {i + 1}</span>
+            ))}
+          </div>
         </div>
-        <span className="text-xs font-bold text-white/50 uppercase tracking-widest">Meta</span>
-      </div>
+      )}
 
-      {/* Pistas */}
-      <div className="p-3 space-y-2">
-        {ordenados.map((v, idx) => {
-          const originalIdx = vendedores.findIndex(vv => vv.id === v.id)
-          const c   = getCor(originalIdx)
-          const sc      = scores?.[v.id] || { score: 0 }
-          const pos     = Math.min(Math.max(sc.score, 0), 100)
-          const display = sc.scoreDisplay ?? sc.score
-          const isLeading = idx === 0 && pos > 0
+      {ranking.map((item, index) => {
+        const pct       = Math.min(item.percentual, 100)
+        const bateuMeta = item.percentual >= 100
 
-          return (
-            <div key={v.id} className="flex items-center gap-3">
-              {/* Posição */}
-              <div className="text-xs font-black w-5 text-center"
-                style={{ color: idx === 0 ? '#FFD700' : idx === 1 ? '#C0C0C0' : idx === 2 ? '#CD7F32' : '#ffffff50' }}>
-                {idx + 1}
-              </div>
-
-              {/* Avatar */}
-              <Avatar nome={v.nome} fotoUrl={v.foto_url} index={originalIdx} size={28} label={v.label} />
-
-              {/* Pista */}
-              <div className="flex-1 relative" style={{ height: 36 }}>
-                {/* Asfalto */}
-                <div className="absolute inset-0 rounded-lg overflow-hidden"
-                  style={{ background: 'linear-gradient(180deg, #2d2d44 0%, #1e1e30 50%, #2d2d44 100%)' }}>
-
-                  {/* Linhas da pista (tracejado central) */}
-                  <div className="absolute inset-y-0 left-0 right-0 flex items-center px-1">
-                    <div className="w-full flex justify-around">
-                      {[...Array(20)].map((_, i) => (
-                        <div key={i} className="rounded-full opacity-20"
-                          style={{ width: 10, height: 2, background: '#fff' }} />
-                      ))}
-                    </div>
+        return (
+          <motion.div
+            key={item.id}
+            layout
+            className={`mb-3 p-3 rounded-lg transition-all ${
+              index === 0
+                ? 'bg-yellow-500/10 border border-yellow-400/40 shadow-[0_0_25px_rgba(255,215,0,0.4)]'
+                : 'bg-white/5 border border-white/5'
+            }`}
+          >
+            {/* HEADER DA PISTA */}
+            <div className="flex justify-between items-center mb-1 text-sm">
+              <div className="flex items-center gap-2">
+                <span className="text-xs w-4 text-gray-400">{index + 1}</span>
+                {item.codigo && (
+                  <div className="w-6 h-6 bg-white text-black rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0">
+                    {String(item.codigo).slice(0, 3)}
                   </div>
-
-                  {/* Divisórias das semanas */}
-                  {semanas > 0 && [25, 50, 75].map(p => (
-                    <div key={p} className="absolute top-0 bottom-0 w-px opacity-20"
-                      style={{ left: `${p}%`, background: '#fff' }} />
-                  ))}
-
-                  {/* Trilha de progresso */}
-                  {pos > 0 && (
-                    <div className="absolute top-0 bottom-0 left-0 rounded-lg transition-all duration-700"
-                      style={{
-                        width: `${Math.max(pos, 4)}%`,
-                        background: `linear-gradient(90deg, ${c.fill}22 0%, ${c.fill}55 100%)`,
-                        borderRight: `2px solid ${c.fill}`,
-                        boxShadow: `0 0 12px ${c.fill}66`,
-                      }} />
-                  )}
-
-                  {/* Carro */}
-                  <div
-                    className="absolute top-1/2 transition-all duration-700 flex items-center justify-center"
-                    style={{
-                      left: `calc(${Math.max(pos, 4)}% - 22px)`,
-                      transform: 'translateY(-50%) scaleX(-1)',
-                      fontSize: 32,
-                      filter: `drop-shadow(0 0 6px ${c.fill})`,
-                    }}
-                  >
-                    {c.car}
-                  </div>
-                </div>
-
-                {/* Bandeirada (meta) */}
-                <div className="absolute right-0 top-0 bottom-0 w-5 flex flex-col justify-center items-center rounded-r-lg overflow-hidden"
-                  style={{ background: pos >= 100 ? '#FFD700' : '#ffffff15' }}>
-                  {pos >= 100
-                    ? <span className="text-xs">🏆</span>
-                    : <div className="grid grid-cols-2 gap-px opacity-40">
-                        {[...Array(8)].map((_, i) => (
-                          <div key={i} className="w-2 h-2"
-                            style={{ background: i % 2 === (Math.floor(i / 2) % 2) ? '#fff' : '#000' }} />
-                        ))}
-                      </div>
-                  }
-                </div>
+                )}
+                <span className={`truncate ${index === 0 ? 'text-yellow-300 font-bold' : 'text-gray-300'}`}>
+                  {index === 0 ? '👑 ' : ''}{item.nome}
+                </span>
               </div>
-
-              {/* Score */}
-              <div className="text-xs font-black min-w-[44px] text-right tabular-nums"
-                style={{ color: c.border }}>
-                {fmtPct(display)}
-                {isLeading && <span className="ml-1">👑</span>}
-              </div>
+              <span className={`font-semibold ${bateuMeta ? 'text-yellow-400' : index === 0 ? 'text-yellow-400' : 'text-green-400'}`}>
+                {fmtPct(item.percentual)}
+                {bateuMeta && ' 🏆'}
+              </span>
             </div>
-          )
-        })}
-      </div>
 
-      {/* Rodapé */}
-      <div className="flex justify-between text-xs text-white/25 px-4 pb-3"
-        style={{ paddingLeft: 'calc(1rem + 20px + 28px + 12px + 12px + 4px)' }}>
+            {/* PISTA */}
+            <div className="relative h-8 rounded-full bg-black/40 overflow-hidden">
+
+              {/* ZONAS DAS SEMANAS */}
+              {semanas > 0 && (
+                <div className="absolute inset-0 grid grid-cols-4">
+                  <div className="bg-blue-500/5" />
+                  <div className="bg-yellow-500/5" />
+                  <div className="bg-orange-500/5" />
+                  <div className="bg-red-500/5" />
+                </div>
+              )}
+
+              {/* LINHAS DIVISÓRIAS */}
+              {semanas > 0 && (
+                <div className="absolute inset-0 grid grid-cols-4">
+                  {[1, 2, 3, 4].map(i => (
+                    <div key={i} className="border-r border-white/10" />
+                  ))}
+                </div>
+              )}
+
+              {/* BARRA DE PROGRESSO */}
+              <motion.div
+                animate={{ width: `${pct}%` }}
+                transition={{ duration: 1 }}
+                className={`h-full bg-gradient-to-r ${
+                  index === 0
+                    ? 'from-yellow-400 to-orange-500'
+                    : index === 1
+                    ? 'from-slate-400 to-slate-300'
+                    : index === 2
+                    ? 'from-amber-700 to-amber-500'
+                    : 'from-purple-500 to-blue-500'
+                } ${bateuMeta ? 'shadow-[0_0_20px_rgba(255,215,0,0.6)] animate-pulse' : ''}`}
+              />
+
+              {/* EFEITO VIDA */}
+              <motion.div
+                animate={{ opacity: [0.85, 1, 0.85] }}
+                transition={{ duration: 2, repeat: Infinity }}
+                className="absolute inset-0 bg-white/5 pointer-events-none"
+              />
+
+              {/* CARRINHO */}
+              <motion.div
+                animate={{ left: `${Math.min(pct, 97)}%` }}
+                transition={{ type: 'spring', stiffness: 90, damping: 14, mass: 0.8 }}
+                className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2"
+              >
+                <motion.span
+                  animate={{
+                    scaleX: [-1, -1],
+                    rotate: [0, 8, -6, 4, 0],
+                    scale: index === 0 ? [1, 1.15, 1] : 1,
+                  }}
+                  transition={{ duration: 0.6, repeat: Infinity }}
+                  style={{ display: 'inline-block', scaleX: -1 }}
+                  className="text-lg"
+                >
+                  🚗
+                </motion.span>
+              </motion.div>
+
+              {/* META ATINGIDA */}
+              {bateuMeta && (
+                <motion.div
+                  initial={{ scale: 0 }}
+                  animate={{ scale: [1, 1.4, 1] }}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-lg"
+                >
+                  🏁✨
+                </motion.div>
+              )}
+
+              {/* MARCA 50% */}
+              <div className="absolute left-1/2 top-0 h-full border-l border-white/10 flex items-end justify-center pointer-events-none">
+                <span className="text-[9px] text-gray-500 mb-0.5">50%</span>
+              </div>
+
+            </div>
+          </motion.div>
+        )
+      })}
+
+      {/* RODAPÉ */}
+      <div className="flex justify-between text-[10px] text-gray-500 mt-1 px-1">
         <span>Largada</span>
-        {semanas > 0 && <span>50%</span>}
+        <span>50%</span>
         <span>100% Meta</span>
       </div>
     </div>
