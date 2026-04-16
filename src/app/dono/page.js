@@ -287,7 +287,6 @@ export default function DonoPage() {
               className={`px-4 py-1.5 rounded-lg text-sm border transition-all ${visao === 'anual' ? 'bg-stone-900 text-white border-stone-900' : 'bg-white text-stone-600 border-stone-200 hover:bg-stone-50'}`}>
               📊 Evolução Anual
             </button>
-            <button onClick={() => setModalLoja(true)} className="btn-success text-sm">+ Nova Loja</button>
           </div>
         </div>
 
@@ -404,14 +403,19 @@ export default function DonoPage() {
           const todayKey = toDateKey(TODAY)
 
           // Score acumulado dos dias selecionados
+          const diasUteisTotal = semanas.flat().filter(d => d.inMonth).length || 26
           const scoresDia = {}
           lojas.forEach(l => {
             const d   = lojaData[l.id] || { lancamentos: [], metaLoja: null }
             const lcs = d.lancamentos.filter(lc => selDs.includes(lc.data))
             const st  = aggregateLancamentos(lcs)
-            const metaDia = ((d.metaLoja?.meta_total || 0) / 26) * selDs.length
-            const score   = metaDia > 0 ? Math.round(st.vendas / metaDia * 1000) / 10 : 0
-            scoresDia[l.id] = { scoreDisplay: score, score, vendas: st.vendas, atendimentos: st.atendimentos, pecas: st.pecas }
+            const metaTotal = d.metaLoja?.meta_total || 0
+            // Posição na pista = progresso real em relação à meta mensal
+            const scorePista = metaTotal > 0 ? Math.round(st.vendas / metaTotal * 1000) / 10 : 0
+            // % exibido = desempenho vs meta proporcional dos dias selecionados
+            const metaDia = (metaTotal / diasUteisTotal) * selDs.length
+            const desempenho = metaDia > 0 ? Math.round(st.vendas / metaDia * 1000) / 10 : 0
+            scoresDia[l.id] = { scoreDisplay: desempenho, score: scorePista, vendas: st.vendas, atendimentos: st.atendimentos, pecas: st.pecas }
           })
 
           const diasSorted = [...selDs].sort()

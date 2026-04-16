@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 24" width="20" height="24">
+  <!-- mastro -->
+  <rect x="1" y="0" width="2" height="24" fill="white" rx="1"/>
+  <!-- bandeira xadrez 4x3 -->
+  <!-- linha 1 -->
+  <rect x="3" y="0" width="4" height="4" fill="white"/>
+  <rect x="7" y="0" width="4" height="4" fill="black"/>
+  <rect x="11" y="0" width="4" height="4" fill="white"/>
+  <rect x="15" y="0" width="4" height="4" fill="black"/>
+  <!-- linha 2 -->
+  <rect x="3" y="4" width="4" height="4" fill="black"/>
+  <rect x="7" y="4" width="4" height="4" fill="white"/>
+  <rect x="11" y="4" width="4" height="4" fill="black"/>
+  <rect x="15" y="4" width="4" height="4" fill="white"/>
+  <!-- linha 3 -->
+  <rect x="3" y="8" width="4" height="4" fill="white"/>
+  <rect x="7" y="8" width="4" height="4" fill="black"/>
+  <rect x="11" y="8" width="4" height="4" fill="white"/>
+  <rect x="15" y="8" width="4" height="4" fill="black"/>
+</svg>

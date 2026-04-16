@@ -34,17 +34,16 @@ function ScoreRing({ score, size = 100 }) {
   )
 }
 
-function MetricCard({ label, value, meta, pct, color, unit = '' }) {
+function MetricCard({ label, meta, pct, color, unit = '' }) {
   return (
-    <div className="card p-4">
-      <p className="text-xs text-stone-400 mb-1">{label}</p>
-      <p className="text-xl font-extrabold text-stone-900">{value}{unit}</p>
-      <p className="text-xs text-stone-400 mb-2">meta: {meta}{unit}</p>
-      <div className="h-2 bg-stone-100 rounded-full overflow-hidden">
+    <div className="card p-4 flex flex-col items-center text-center">
+      <p className="text-sm font-bold text-stone-600 mb-1">{label}</p>
+      <p className="text-3xl font-black mt-1 mb-2 leading-none" style={{ color }}>{fmtPct(pct)}</p>
+      <div className="w-full h-2 bg-stone-100 rounded-full overflow-hidden mb-1.5">
         <div className="h-full rounded-full transition-all duration-700"
           style={{ width: `${Math.min(pct, 100)}%`, background: color }} />
       </div>
-      <p className="text-xs font-bold mt-1" style={{ color }}>{fmtPct(pct)}</p>
+      <p className="text-xs text-stone-400">meta: {meta}{unit}</p>
     </div>
   )
 }
@@ -222,14 +221,14 @@ export default function VendedorPage() {
 
         {/* Métricas */}
         <div className="grid grid-cols-3 gap-3">
-          <MetricCard label={`Venda (${pesos.peso_venda}%)`}
-            value={fmtR(stats.vendas)} meta={fmtR(meta.meta_venda)}
+          <MetricCard label="Venda"
+            meta={fmtR(meta.meta_venda)}
             pct={scored.pv} color={c.fill} />
-          <MetricCard label={`Ticket (${pesos.peso_ticket}%)`}
-            value={fmtR(stats.ticket)} meta={fmtR(meta.meta_ticket)}
+          <MetricCard label="Ticket"
+            meta={fmtR(meta.meta_ticket)}
             pct={scored.pt} color={c.border} />
-          <MetricCard label={`PA (${pesos.peso_pa}%)`}
-            value={fmtN(stats.pa, 1)} meta={fmtN(meta.meta_pa, 1)}
+          <MetricCard label="PA"
+            meta={fmtN(meta.meta_pa, 1)}
             pct={scored.pp} color="#10b981" unit=" pçs" />
         </div>
 
@@ -259,7 +258,7 @@ export default function VendedorPage() {
                 <div key={wi}>
                   <div className="flex justify-between text-xs text-stone-500 mb-1">
                     <span className="font-medium">Semana {wi + 1} <span className="text-stone-400">({f?.date.getDate()}–{l2?.date.getDate()})</span></span>
-                    <span className="font-bold text-stone-700">{fmtR(total)}</span>
+                    <span className="font-bold text-sm" style={{ color: pct >= 100 ? '#10b981' : pct > 0 ? c.fill : '#d1d5db' }}>{fmtPct(pct)}</span>
                   </div>
                   <div className="h-2.5 bg-stone-100 rounded-full overflow-hidden">
                     <div className="h-full rounded-full transition-all duration-700"
@@ -302,34 +301,6 @@ export default function VendedorPage() {
           </div>
         </div>
 
-        {/* Histórico */}
-        <div className="card p-4">
-          <p className="section-title">Histórico do Mês</p>
-          {meusLcs.length === 0 ? (
-            <p className="text-sm text-stone-400 text-center py-4">Nenhum lançamento ainda.</p>
-          ) : (
-            <div className="space-y-1">
-              {[...meusLcs].sort((a, b) => b.data.localeCompare(a.data)).map(l => {
-                const ticket = l.atendimentos > 0 ? l.vendas / l.atendimentos : 0
-                const pa     = l.atendimentos > 0 ? l.pecas / l.atendimentos : 0
-                const d      = new Date(l.data + 'T12:00:00')
-                return (
-                  <div key={l.id} className="flex items-center justify-between py-2 border-b border-stone-100 last:border-0">
-                    <div>
-                      <p className="text-sm font-medium text-stone-800">
-                        {d.toLocaleDateString('pt-BR', { weekday: 'short', day: 'numeric', month: 'short' })}
-                      </p>
-                      <p className="text-xs text-stone-400">
-                        {l.atendimentos} atend. · {l.pecas} pçs · ticket {fmtR(ticket)} · PA {fmtN(pa, 1)}
-                      </p>
-                    </div>
-                    <p className="text-sm font-extrabold text-stone-900">{fmtR(l.vendas)}</p>
-                  </div>
-                )
-              })}
-            </div>
-          )}
-        </div>
 
       </main>
     </div>
