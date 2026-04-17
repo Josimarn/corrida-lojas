@@ -2,7 +2,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClientComponent } from '@/lib/supabase-browser'
-import NavBar from '@/components/NavBar'
 import { getCor } from '@/lib/helpers'
 
 const PERFIS = ['admin_cliente', 'dono', 'coordenador', 'gerente', 'vendedor']
@@ -294,57 +293,73 @@ export default function AdminPage() {
   }
 
   if (loading) return (
-    <div className="min-h-screen flex items-center justify-center">
-      <div className="text-stone-400 text-sm">Carregando...</div>
+    <div className="min-h-screen flex items-center justify-center bg-[#0b1220]">
+      <div className="text-gray-400 text-sm">Carregando...</div>
     </div>
   )
 
   return (
-    <div className="min-h-screen bg-stone-100">
-      <NavBar usuario={usuario} titulo={empresa?.nome || 'Admin'} subtitulo="Administrador" />
-
+    <div className="min-h-screen bg-[#0b1220] text-white">
       <main className="max-w-5xl mx-auto px-4 py-5 space-y-5">
 
-        {/* KPIs */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {[
-            ['Lojas',         lojas.length,                      'cadastradas'],
-            ['Usuários',      usuarios.length,                   'total'],
-            ['Gerentes',      perfisCounts['gerente']     || 0,  'ativos'],
-            ['Coordenadores', perfisCounts['coordenador'] || 0,  'regionais'],
-          ].map(([l, v, s]) => (
-            <div key={l} className="card p-4 text-center">
-              <p className="text-xs text-stone-400">{l}</p>
-              <p className="text-2xl font-extrabold text-stone-900 mt-0.5">{v}</p>
-              <p className="text-xs text-stone-400">{s}</p>
+        {/* Header */}
+        <div className="mb-2">
+          <div className="flex justify-between items-center mb-4">
+            <div>
+              <h1 className="text-2xl font-bold text-white">⚙️ {empresa?.nome || 'Admin'}</h1>
+              <p className="text-sm text-gray-400">{lojas.length} loja{lojas.length !== 1 ? 's' : ''} cadastrada{lojas.length !== 1 ? 's' : ''}</p>
             </div>
-          ))}
-        </div>
+            <div className="flex items-center gap-2">
+              <span className="px-3 py-1 rounded-full text-xs font-medium bg-amber-500/20 text-amber-300">
+                Administrador
+              </span>
+              <button onClick={() => router.replace('/')} className="px-3 py-1 bg-white/10 hover:bg-white/20 rounded text-sm text-white transition-all">
+                Sair
+              </button>
+            </div>
+          </div>
 
-        {/* Tabs */}
-        <div className="flex gap-2 flex-wrap">
-          {[['lojas', '🏪 Lojas'], ['vinculos', '🔗 Vínculos'], ['config', '🎨 Identidade Visual']].map(([t, label]) => (
-            <button key={t} onClick={() => setTab(t)}
-              className={`px-4 py-1.5 rounded-lg text-sm border transition-all ${tab === t ? 'bg-stone-900 text-white border-stone-900' : 'bg-white text-stone-600 border-stone-200 hover:bg-stone-50'}`}>
-              {label}
-            </button>
-          ))}
+          {/* KPIs */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {[
+              ['Lojas',         lojas.length,                      'cadastradas',  'text-green-400'],
+              ['Usuários',      usuarios.length,                   'total',        'text-white'],
+              ['Gerentes',      perfisCounts['gerente']     || 0,  'ativos',       'text-white'],
+              ['Coordenadores', perfisCounts['coordenador'] || 0,  'regionais',    'text-white'],
+            ].map(([l, v, s, cls]) => (
+              <div key={l} className="p-4 rounded-xl bg-white/5 border border-white/10">
+                <p className="text-xs text-gray-400">{l}</p>
+                <p className={`text-xl font-bold ${cls}`}>{v}</p>
+                <p className="text-xs text-gray-500">{s}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* Tabs */}
+          <div className="flex gap-2 flex-wrap mt-4">
+            {[['lojas', '🏪 Lojas'], ['vinculos', '🔗 Vínculos'], ['config', '🎨 Identidade Visual']].map(([t, label]) => (
+              <button key={t} onClick={() => setTab(t)}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${tab === t ? 'bg-white text-black' : 'bg-white/10 text-gray-300 hover:bg-white/20'}`}>
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* ── ABA: LOJAS ── */}
         {tab === 'lojas' && (
-          <div className="card p-4">
+          <div className="bg-white/5 border border-white/10 rounded-xl p-4">
             <div className="flex items-center justify-between mb-3 gap-3 flex-wrap">
-              <p className="section-title mb-0">Lojas <span className="text-stone-400 font-normal text-xs">({lojasFiltradas.length})</span></p>
+              <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-0">Lojas <span className="text-gray-500 font-normal">({lojasFiltradas.length})</span></p>
               <div className="flex items-center gap-2">
                 <input value={buscaLoja} onChange={e => setBuscaLoja(e.target.value)}
                   placeholder="Loja, gerente ou coord..."
-                  className="text-xs border border-stone-200 rounded-lg px-2 py-1.5 bg-white text-stone-700 w-44" />
+                  className="text-xs border border-white/20 rounded-lg px-2 py-1.5 bg-white/10 text-white placeholder-gray-500 w-44" />
                 <button onClick={() => { setModalLoja(true); setMsgL(null) }} className="btn-success text-xs">+ Nova Loja</button>
               </div>
             </div>
             {lojasFiltradas.length === 0 ? (
-              <p className="text-sm text-stone-400 text-center py-4">{buscaLoja ? 'Nenhuma loja encontrada.' : 'Nenhuma loja cadastrada.'}</p>
+              <p className="text-sm text-gray-400 text-center py-4">{buscaLoja ? 'Nenhuma loja encontrada.' : 'Nenhuma loja cadastrada.'}</p>
             ) : (
               <div className="space-y-2">
                 {lojasFiltradas.map((l, i) => {
@@ -352,7 +367,7 @@ export default function AdminPage() {
                   const gers = gerentesLoja(l.id)
                   const ss   = supervisoresLoja(l.id)
                   return (
-                    <div key={l.id} className="flex items-center gap-3 py-3 border-b border-stone-100 last:border-0">
+                    <div key={l.id} className="flex items-center gap-3 py-3 border-b border-white/10 last:border-0">
                       <div className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0"
                         style={{ background: c.bg, color: c.border }}>
                         {l.exibir_como === 'codigo' && l.codigo
@@ -360,11 +375,11 @@ export default function AdminPage() {
                           : l.nome.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="font-semibold text-sm text-stone-900">{l.nome}</p>
-                        <p className="text-xs text-stone-400">
+                        <p className="font-semibold text-sm text-white">{l.nome}</p>
+                        <p className="text-xs text-gray-400">
                           {[l.cidade, l.estado].filter(Boolean).join(' — ')}
-                          {gers.length > 0 && <span className="ml-2 text-green-600">Ger: {gers.map(g => g.usuarios?.nome).join(', ')}</span>}
-                          {ss.length > 0  && <span className="ml-2 text-blue-600">Coord: {ss.map(s => s.usuarios?.nome).join(', ')}</span>}
+                          {gers.length > 0 && <span className="ml-2 text-green-400">Ger: {gers.map(g => g.usuarios?.nome).join(', ')}</span>}
+                          {ss.length > 0  && <span className="ml-2 text-blue-400">Coord: {ss.map(s => s.usuarios?.nome).join(', ')}</span>}
                         </p>
                       </div>
                       <div className="flex items-center gap-2 flex-shrink-0">
@@ -397,46 +412,46 @@ export default function AdminPage() {
 
         {/* ── ABA: VÍNCULOS ── */}
         {tab === 'vinculos' && (
-          <div className="card p-4">
-            <p className="section-title mb-4">Vínculos por Loja</p>
+          <div className="bg-white/5 border border-white/10 rounded-xl p-4">
+            <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">Vínculos por Loja</p>
             <div className="space-y-4">
               {lojas.map((l, i) => {
                 const c     = getCor(i)
                 const gers  = gerentesLoja(l.id)
                 const ss    = supervisoresLoja(l.id)
                 return (
-                  <div key={l.id} className="border border-stone-100 rounded-xl p-4">
+                  <div key={l.id} className="border border-white/10 rounded-xl p-4">
                     <div className="flex items-center gap-2.5 mb-3">
                       <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold"
                         style={{ background: c.bg, color: c.border }}>
                         {l.nome.split(' ').map(w => w[0]).join('').slice(0, 2)}
                       </div>
-                      <p className="font-semibold text-stone-900 text-sm">{l.nome}</p>
-                      {l.cidade && <p className="text-xs text-stone-400">{l.cidade}</p>}
+                      <p className="font-semibold text-white text-sm">{l.nome}</p>
+                      {l.cidade && <p className="text-xs text-gray-400">{l.cidade}</p>}
                       <button onClick={() => { setModalVinc(l); setMsgV(null); setSelVincGer(''); setSelVincSup('') }}
                         className="ml-auto btn-info text-xs px-2 py-1">+ Vincular</button>
                     </div>
 
                     <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <p className="text-xs font-medium text-stone-400 mb-1.5">Gerente(s)</p>
+                        <p className="text-xs font-medium text-gray-400 mb-1.5">Gerente(s)</p>
                         {gers.length === 0
-                          ? <p className="text-xs text-stone-300 italic">Nenhum</p>
+                          ? <p className="text-xs text-gray-500 italic">Nenhum</p>
                           : gers.map(g => (
                             <div key={g.usuario_id} className="flex items-center justify-between text-xs mb-1">
-                              <span className="font-semibold text-stone-800">{g.usuarios?.nome}</span>
+                              <span className="font-semibold text-white">{g.usuarios?.nome}</span>
                               <button onClick={() => desvincular(l.id, g.usuario_id, 'gerente')}
                                 className="text-red-400 hover:text-red-600 ml-2">✕</button>
                             </div>
                           ))}
                       </div>
                       <div>
-                        <p className="text-xs font-medium text-stone-400 mb-1.5">Coordenador(es)</p>
+                        <p className="text-xs font-medium text-gray-400 mb-1.5">Coordenador(es)</p>
                         {ss.length === 0
-                          ? <p className="text-xs text-stone-300 italic">Nenhum</p>
+                          ? <p className="text-xs text-gray-500 italic">Nenhum</p>
                           : ss.map(s => (
                             <div key={s.usuario_id} className="flex items-center justify-between text-xs mb-1">
-                              <span className="font-semibold text-stone-800">{s.usuarios?.nome}</span>
+                              <span className="font-semibold text-white">{s.usuarios?.nome}</span>
                               <button onClick={() => desvincular(l.id, s.usuario_id, 'coordenador')}
                                 className="text-red-400 hover:text-red-600 ml-2">✕</button>
                             </div>
@@ -600,8 +615,8 @@ export default function AdminPage() {
 
       {/* ── ABA: IDENTIDADE VISUAL ── */}
       {tab === 'config' && (
-        <div className="card p-5 max-w-lg">
-          <p className="section-title">Identidade Visual — {empresa?.nome_fantasia || empresa?.nome}</p>
+        <div className="bg-white/5 border border-white/10 rounded-xl p-5 max-w-lg mx-4 md:mx-auto mb-5">
+          <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">Identidade Visual — {empresa?.nome_fantasia || empresa?.nome}</p>
 
           <div className="grid grid-cols-2 gap-4 mb-4">
             <div>

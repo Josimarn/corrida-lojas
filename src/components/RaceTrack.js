@@ -3,6 +3,15 @@
 import { motion } from 'framer-motion'
 import { fmtPct } from '@/lib/helpers'
 
+const CORES_F1 = [
+  { text: '#facc15', bar: 'from-yellow-400 to-orange-500' },
+  { text: '#94a3b8', bar: 'from-slate-400 to-slate-300' },
+  { text: '#f59e0b', bar: 'from-amber-700 to-amber-500' },
+  { text: '#818cf8', bar: 'from-indigo-500 to-purple-500' },
+  { text: '#34d399', bar: 'from-green-500 to-emerald-400' },
+]
+function corF1(index) { return CORES_F1[index] || CORES_F1[4] }
+
 // Aceita duas APIs:
 // Nova: <RaceTrack ranking={[{ id, nome, codigo, percentual }]} />
 // Antiga: <RaceTrack vendedores={[...]} scores={{ [id]: { score, scoreDisplay } }} semanas={4} />
@@ -82,14 +91,14 @@ export default function RaceTrack({ ranking: rankingProp, vendedores, scores, se
                   {index === 0 ? '👑 ' : ''}{item.nome}
                 </span>
               </div>
-              <span className={`font-semibold ${bateuMeta ? 'text-yellow-400' : index === 0 ? 'text-yellow-400' : 'text-green-400'}`}>
+              <span className="font-semibold" style={{ color: bateuMeta ? '#facc15' : corF1(index).text }}>
                 {fmtPct(item.percentual)}
                 {bateuMeta && ' 🏆'}
               </span>
             </div>
 
             {/* PISTA */}
-            <div className="relative h-8 rounded-full bg-black/40 overflow-hidden">
+            <div className="relative h-12 rounded-full bg-black/40 overflow-hidden">
 
               {/* ZONAS DAS SEMANAS */}
               {semanas > 0 && (
@@ -114,15 +123,7 @@ export default function RaceTrack({ ranking: rankingProp, vendedores, scores, se
               <motion.div
                 animate={{ width: `${pct}%` }}
                 transition={{ duration: 1 }}
-                className={`h-full bg-gradient-to-r ${
-                  index === 0
-                    ? 'from-yellow-400 to-orange-500'
-                    : index === 1
-                    ? 'from-slate-400 to-slate-300'
-                    : index === 2
-                    ? 'from-amber-700 to-amber-500'
-                    : 'from-purple-500 to-blue-500'
-                } ${bateuMeta ? 'shadow-[0_0_20px_rgba(255,215,0,0.6)] animate-pulse' : ''}`}
+                className={`h-full bg-gradient-to-r ${corF1(index).bar} ${bateuMeta ? 'shadow-[0_0_20px_rgba(255,215,0,0.6)] animate-pulse' : ''}`}
               />
 
               {/* EFEITO VIDA */}
@@ -146,7 +147,7 @@ export default function RaceTrack({ ranking: rankingProp, vendedores, scores, se
                   }}
                   transition={{ duration: 0.6, repeat: Infinity }}
                   style={{ display: 'inline-block', scaleX: -1 }}
-                  className="text-lg"
+                  className="text-3xl"
                 >
                   🚗
                 </motion.span>

@@ -4,6 +4,15 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useEffect, useState } from 'react'
 import { fmtR, fmtPct, aggregateLancamentos } from '@/lib/helpers'
 
+const CORES_F1 = [
+  { text: '#facc15', bar: 'from-yellow-400 to-orange-500' },
+  { text: '#94a3b8', bar: 'from-slate-400 to-slate-300' },
+  { text: '#f59e0b', bar: 'from-amber-700 to-amber-500' },
+  { text: '#818cf8', bar: 'from-indigo-500 to-purple-500' },
+  { text: '#34d399', bar: 'from-green-500 to-emerald-400' },
+]
+function corF1(index) { return CORES_F1[index] || CORES_F1[4] }
+
 export default function CardsDesempenho({ ranking = [], lojaData = {} }) {
   const [prevRanking, setPrevRanking] = useState([])
   const [movimentos, setMovimentos] = useState({})
@@ -39,13 +48,16 @@ export default function CardsDesempenho({ ranking = [], lojaData = {} }) {
             const isTop  = index === 0
             const mov    = movimentos[loja.id]
 
-            const bgClass = isTop
+            const cor     = corF1(index)
+            const bgClass = index === 0
               ? 'bg-yellow-500/10 border-yellow-400/40 shadow-[0_0_25px_rgba(255,215,0,0.3)]'
-              : score >= 70
-              ? 'bg-blue-500/10 border-blue-400/30'
-              : score >= 40
-              ? 'bg-orange-500/10 border-orange-400/30'
-              : 'bg-red-500/10 border-red-400/30'
+              : index === 1
+              ? 'bg-slate-500/10 border-slate-400/30'
+              : index === 2
+              ? 'bg-amber-500/10 border-amber-600/30'
+              : index === 3
+              ? 'bg-indigo-500/10 border-indigo-400/30'
+              : 'bg-emerald-500/10 border-emerald-400/30'
 
             return (
               <motion.div
@@ -92,7 +104,8 @@ export default function CardsDesempenho({ ranking = [], lojaData = {} }) {
                     key={score}
                     initial={{ scale: 1.2 }}
                     animate={{ scale: 1 }}
-                    className={`text-lg font-bold ${isTop ? 'text-yellow-400' : 'text-green-400'}`}
+                    className="text-lg font-bold"
+                    style={{ color: cor.text }}
                   >
                     {fmtPct(loja.percentual)}
                   </motion.span>
@@ -104,11 +117,7 @@ export default function CardsDesempenho({ ranking = [], lojaData = {} }) {
                     initial={{ width: 0 }}
                     animate={{ width: `${score}%` }}
                     transition={{ duration: 0.8 }}
-                    className={`h-full ${
-                      isTop
-                        ? 'bg-gradient-to-r from-yellow-400 to-orange-500'
-                        : 'bg-gradient-to-r from-purple-500 to-blue-500'
-                    }`}
+                    className={`h-full bg-gradient-to-r ${cor.bar}`}
                   />
                 </div>
 

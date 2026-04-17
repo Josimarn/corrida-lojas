@@ -1,7 +1,4 @@
 {
-  "/gerente/page": "app/gerente/page.js",
-  "/gerente/tv/page": "app/gerente/tv/page.js",
-  "/dashboard/page": "app/dashboard/page.js",
-  "/dono/page": "app/dono/page.js",
-  "/vendedor/page": "app/vendedor/page.js"
+  "/_not-found/page": "app/_not-found/page.js",
+  "/gerente/page": "app/gerente/page.js"
 }

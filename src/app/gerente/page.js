@@ -27,6 +27,7 @@ function CurrencyInput({ value, onChange, placeholder, ...props }) {
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase-browser'
 import NavBar from '@/components/NavBar'
+import HeaderAbsurdo from '@/components/HeaderAbsurdo'
 import RaceTrack from '@/components/RaceTrack'
 import ScoreCard from '@/components/ScoreCard'
 import Avatar from '@/components/Avatar'
@@ -97,6 +98,12 @@ export default function GerentePage() {
   const [fotoPreview,     setFotoPreview]     = useState(null)
   const [uploadingFoto,   setUploadingFoto]   = useState(false)
   const fileInputRef = useRef(null)
+  const audioRef     = useRef(null)
+
+  // Ultrapassagem no ranking
+  const [ultrapassou,    setUltrapassou]    = useState(false)
+  const [prevRankIds,    setPrevRankIds]    = useState('')
+  const [movimentosVend, setMovimentosVend] = useState({})
 
   // Edição inline de vendedor
   const [editandoId,    setEditandoId]    = useState(null)
@@ -151,6 +158,28 @@ export default function GerentePage() {
     setLoading(false)
   }, [router, vY, vM])
 
+  // Scores e ranking (calculados antes dos useEffects para evitar TDZ)
+  const weekNumber = getWeekNumber(vY, vM)
+  const scores = {}
+  vendedores.forEach(v => {
+    const lcs   = lancamentos.filter(l => l.vendedor_id === v.id)
+    const stats = aggregateLancamentos(lcs)
+    const meta  = getVendedorMeta(v.id)
+    const pesos = { peso_venda: metaLoja?.peso_venda || 40, peso_ticket: metaLoja?.peso_ticket || 30, peso_pa: metaLoja?.peso_pa || 30 }
+    const calc  = calcScore(stats, meta, pesos)
+    scores[v.id] = {
+      ...calc,
+      scoreDisplay: calc.score,
+      score: applyWeekPos(calc.score, weekNumber),
+      stats,
+      pesos,
+    }
+  })
+  const rankingAtual = [...vendedores]
+    .map(v => ({ id: v.id, nome: v.nome, score: scores[v.id]?.scoreDisplay || 0 }))
+    .sort((a, b) => b.score - a.score)
+  const rankIds = rankingAtual.map(v => v.id).join(',')
+
   useEffect(() => { load() }, [load])
 
   const loadAnual = useCallback(async (anos, lojaId, vs) => {
@@ -176,6 +205,34 @@ export default function GerentePage() {
   useEffect(() => {
     if (visao === 'anual' && loja) loadAnual(anossel, loja.id, vendedores)
   }, [visao, anossel, loja, vendedores, loadAnual])
+
+  useEffect(() => {
+    if (prevRankIds && rankIds && prevRankIds !== rankIds) {
+      const prev = prevRankIds.split(',')
+      const cur  = rankIds.split(',')
+      if (prev.length === cur.length) {
+        const mov = {}
+        cur.forEach((id, i) => {
+          const antes = prev.indexOf(id)
+          if (antes !== -1 && antes !== i) mov[id] = antes > i ? 'up' : 'down'
+        })
+        if (Object.keys(mov).length) {
+          setMovimentosVend(mov)
+          setTimeout(() => setMovimentosVend({}), 2000)
+        }
+        const houve = cur.some((id, i) => prev.indexOf(id) > i)
+        if (houve) {
+          setUltrapassou(true)
+          if (audioRef.current) {
+            audioRef.current.currentTime = 0
+            audioRef.current.play().catch(() => {})
+          }
+          setTimeout(() => setUltrapassou(false), 2500)
+        }
+      }
+    }
+    if (rankIds) setPrevRankIds(rankIds)
+  }, [rankIds])
 
   useEffect(() => {
     const wks = getWeeksOfMonth(vY, vM)
@@ -262,27 +319,6 @@ export default function GerentePage() {
     setMsgM('Metas salvas com sucesso!')
     load()
   }
-
-  // Scores sempre do mês inteiro
-  const scores = {}
-  const weekNumber = getWeekNumber(vY, vM)
-
-  vendedores.forEach(v => {
-    const lcs   = lancamentos.filter(l => l.vendedor_id === v.id)
-    const stats = aggregateLancamentos(lcs)
-    const meta  = getVendedorMeta(v.id)
-    const pesos = { peso_venda: metaLoja?.peso_venda || 40, peso_ticket: metaLoja?.peso_ticket || 30, peso_pa: metaLoja?.peso_pa || 30 }
-    const calc  = calcScore(stats, meta, pesos)
-
-    scores[v.id] = {
-      ...calc,
-      scoreDisplay: calc.score,
-      // Posição proporcional dentro da semana atual (spread visual sem ultrapassar o limite de tempo)
-      score: applyWeekPos(calc.score, weekNumber),
-      stats,
-      pesos,
-    }
-  })
 
   // ─── Lançar vendas ───────────────────────────────────────
   async function lancarVendas() {
@@ -456,87 +492,105 @@ export default function GerentePage() {
     </div>
   )
 
+  // ── KPIs para o header ──
+  const todayKey2    = toDateKey(TODAY)
+  const ontemDate    = new Date(TODAY); ontemDate.setDate(ontemDate.getDate() - 1)
+  const ontemKey     = toDateKey(ontemDate)
+  const totalVendas  = lancamentos.reduce((s, l) => s + (l.vendas || 0), 0)
+  const vendasHoje   = lancamentos.filter(l => l.data === todayKey2).reduce((s, l) => s + (l.vendas || 0), 0)
+  const vendasOntem  = lancamentos.filter(l => l.data === ontemKey).reduce((s, l) => s + (l.vendas || 0), 0)
+  const metaTotal    = metaLoja?.meta_total || 0
+  const atingimento  = metaTotal > 0 ? (totalVendas / metaTotal) * 100 : 0
+
+  const TABS_GERENTE = [
+    { key: 'mes',    label: '📅 Mês',    activeClass: 'bg-white text-black' },
+    { key: 'diaria', label: '🏁 Diária', activeClass: 'bg-white text-black' },
+    { key: 'anual',  label: '📊 Anual',  activeClass: 'bg-white text-black' },
+    { key: 'vendas', label: '💰 Vendas', activeClass: 'bg-white text-black' },
+    { key: 'guerra', label: '⚔️ Guerra', activeClass: 'bg-red-600 text-white' },
+  ]
+
+  function handleSetVisao(v) {
+    setVisao(v)
+    if (v === 'vendas') { setSelDs([]); setSelW(0) }
+  }
+
+  const rankingInsights = rankingAtual.map(r => ({ ...r, totalVendas: scores[r.id]?.stats?.vendas || 0 }))
+
   return (
-    <div className="min-h-screen bg-stone-100">
-      <NavBar usuario={usuario} titulo={visaoConsol ? 'Visão Consolidada' : loja?.nome || 'Minha Loja'} subtitulo="Gerente" />
+    <motion.div
+      animate={ultrapassou ? { x: [0, -10, 10, -10, 10, 0] } : {}}
+      transition={{ duration: 0.4 }}
+      className="min-h-screen bg-[#0b1220] text-white"
+    >
+      <audio ref={audioRef} src="/sounds/overtake.mp3" preload="auto" />
 
       <main className="max-w-6xl mx-auto px-4 py-5 space-y-5">
 
-        {/* Seletor de loja (aparece só se gerente tiver mais de uma loja) */}
+        {/* Header com KPIs */}
+        <HeaderAbsurdo
+          titulo={`🏁 ${visaoConsol ? 'Visão Consolidada' : loja?.nome || 'Minha Loja'}`}
+          subtitulo={`${vendedores.length} vendedor${vendedores.length !== 1 ? 'es' : ''} ativo${vendedores.length !== 1 ? 's' : ''} • atualização em tempo real`}
+          perfil="Gerente"
+          perfilCor="bg-indigo-500/20 text-indigo-300"
+          totalVendas={totalVendas}
+          metaTotal={metaTotal}
+          atingimento={atingimento}
+          vendedores={vendedores.length}
+          ranking={rankingInsights}
+          mesLabel={`${MESES[vM]} ${vY}`}
+          visao={visao}
+          setVisao={handleSetVisao}
+          onPrev={() => changeMonth(-1)}
+          onNext={() => changeMonth(1)}
+          onSair={() => router.replace('/')}
+          vendasHoje={vendasHoje}
+          vendasOntem={vendasOntem}
+          labelVendas="Vendas da Loja"
+          labelMeta="Meta da Loja"
+          labelAting="loja no mês"
+          labelVend="Vendedores"
+          tvHref="/gerente/tv"
+          tabs={TABS_GERENTE}
+        />
+
+        {/* Seletor de loja — multi-loja */}
         {lojas.length > 1 && (
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs text-stone-400 font-medium">Loja:</span>
+            <span className="text-xs text-gray-400 font-medium">Loja:</span>
             {lojas.map(l => (
               <button key={l.id}
                 onClick={() => {
-                  setLoja(l)
-                  setVisaoConsol(false)
+                  setLoja(l); setVisaoConsol(false)
                   const d = lojaData[l.id] || {}
                   setVendedores(d.vendedores || [])
                   setMetaLoja(d.metaLoja || null)
                   setLancamentos(d.lancamentos || [])
                   setMetasVendedor(d.metasVendedor || [])
                 }}
-                className={`px-3 py-1.5 rounded-lg text-sm border transition-all ${!visaoConsol && loja?.id === l.id ? 'bg-stone-900 text-white border-stone-900' : 'bg-white text-stone-600 border-stone-200 hover:bg-stone-50'}`}>
+                className={`px-3 py-1.5 rounded-lg text-sm border transition-all ${!visaoConsol && loja?.id === l.id ? 'bg-white text-black border-white' : 'bg-white/10 text-gray-300 border-white/20 hover:bg-white/20'}`}>
                 {l.nome}
               </button>
             ))}
-            <button
-              onClick={() => setVisaoConsol(v => !v)}
-              className={`px-3 py-1.5 rounded-lg text-sm border transition-all ${visaoConsol ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-stone-600 border-stone-200 hover:bg-stone-50'}`}>
+            <button onClick={() => setVisaoConsol(v => !v)}
+              className={`px-3 py-1.5 rounded-lg text-sm border transition-all ${visaoConsol ? 'bg-blue-600 text-white border-blue-600' : 'bg-white/10 text-gray-300 border-white/20 hover:bg-white/20'}`}>
               Consolidado
             </button>
           </div>
         )}
 
+        {/* Botões de gestão */}
+        <div className="flex gap-2 justify-end">
+          <button onClick={abrirModalMetas} className="px-3 py-1.5 rounded-lg text-xs border bg-yellow-500/20 text-yellow-300 border-yellow-400/30 hover:bg-yellow-500/30 transition-all">⚙ Metas</button>
+          <button onClick={abrirModalEquipe} className="px-3 py-1.5 rounded-lg text-xs border bg-blue-500/20 text-blue-300 border-blue-400/30 hover:bg-blue-500/30 transition-all">👥 Equipe</button>
+        </div>
+
         {/* Banner vencedores */}
         {vencedores.length > 0 && (
-          <div className="card p-4 bg-green-50 border-green-200 text-green-800 text-sm font-semibold text-center">
+          <div className="p-4 rounded-xl bg-green-500/10 border border-green-400/30 text-green-300 text-sm font-semibold text-center">
             🏆 {vencedores.length === vendedores.length ? 'Toda a equipe bateu a meta do mês!' : `${vencedores.map(v => v.nome).join(', ')} atingiu a meta!`}
           </div>
         )}
-
-        {/* Nav mês + ações */}
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <button onClick={() => changeMonth(-1)} className="btn-secondary px-3 py-2 text-lg">‹</button>
-            <div>
-              <h2 className="text-lg font-bold text-stone-900">{MESES[vM]} {vY}</h2>
-              <p className="text-xs text-stone-400">
-                Meta da loja: {metaLoja ? fmtR(metaLoja.meta_total) : 'não definida'}
-              </p>
-            </div>
-            <button onClick={() => changeMonth(1)} className="btn-secondary px-3 py-2 text-lg">›</button>
-          </div>
-          <div className="flex gap-2 flex-wrap">
-            <button onClick={() => setVisao('mes')}
-              className={`px-3 py-1.5 rounded-lg text-xs border transition-all ${visao === 'mes' ? 'bg-stone-900 text-white border-stone-900' : 'bg-white text-stone-600 border-stone-200 hover:bg-stone-50'}`}>
-              📅 Mês
-            </button>
-            <button onClick={() => setVisao('diaria')}
-              className={`px-3 py-1.5 rounded-lg text-xs border transition-all ${visao === 'diaria' ? 'bg-stone-900 text-white border-stone-900' : 'bg-white text-stone-600 border-stone-200 hover:bg-stone-50'}`}>
-              🏁 Diária
-            </button>
-            <button onClick={() => setVisao('anual')}
-              className={`px-3 py-1.5 rounded-lg text-xs border transition-all ${visao === 'anual' ? 'bg-stone-900 text-white border-stone-900' : 'bg-white text-stone-600 border-stone-200 hover:bg-stone-50'}`}>
-              📊 Anual
-            </button>
-            <button onClick={() => { setVisao('vendas'); setSelDs([]); setSelW(0) }}
-              className={`px-3 py-1.5 rounded-lg text-xs border transition-all ${visao === 'vendas' ? 'bg-stone-900 text-white border-stone-900' : 'bg-white text-stone-600 border-stone-200 hover:bg-stone-50'}`}>
-              💰 Vendas
-            </button>
-            <button onClick={() => setVisao('guerra')}
-              className={`px-3 py-1.5 rounded-lg text-xs border transition-all ${visao === 'guerra' ? 'bg-red-600 text-white border-red-600' : 'bg-white text-stone-600 border-stone-200 hover:bg-stone-50'}`}>
-              ⚔️ Guerra
-            </button>
-            <Link href="/gerente/tv" target="_blank"
-              className="px-3 py-1.5 rounded-lg text-xs border transition-all bg-white text-stone-600 border-stone-200 hover:bg-stone-50">
-              📺 TV
-            </Link>
-            <button onClick={abrirModalMetas} className="btn-warning text-xs">⚙ Metas</button>
-            <button onClick={abrirModalEquipe} className="btn-info text-xs">👥 Equipe</button>
-          </div>
-        </div>
 
         {/* ── VISÃO: MÊS ── */}
         {visao === 'mes' && visaoConsol ? (
@@ -590,13 +644,16 @@ export default function GerentePage() {
           <p className="section-title">Desempenho no Mês</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
             {[...vendedores]
-              .map((v, i) => ({ v, i, score: scores[v.id]?.scoreDisplay || 0 }))
+              .map(v => ({ v, score: scores[v.id]?.scoreDisplay || 0 }))
               .sort((a, b) => b.score - a.score)
-              .map(({ v, i }) => (
-                <ScoreCard key={v.id} vendedor={{ ...v, meta: getVendedorMeta(v.id) }}
+              .map(({ v }, rankIdx) => (
+                <ScoreCard key={v.id}
+                  vendedor={{ ...v, meta: getVendedorMeta(v.id) }}
                   stats={scores[v.id]?.stats}
                   scored={scores[v.id]}
-                  index={i} />
+                  index={rankIdx}
+                  movimento={movimentosVend[v.id]}
+                />
               ))}
           </div>
         </div>
@@ -724,18 +781,19 @@ export default function GerentePage() {
           const scoresDia = {}
           const allMonthKeys = semanas.flat().filter(d => d.inMonth).map(d => d.key)
           vendedores.forEach(v => {
-            const keysD    = selDs.length > 0 ? selDs : allMonthKeys
-            const lcs      = lancamentos.filter(l => l.vendedor_id === v.id && keysD.includes(l.data))
-            const lcsTotal = lancamentos.filter(l => l.vendedor_id === v.id) // mês inteiro p/ cap
-            const st       = aggregateLancamentos(lcs)
-            const meta     = getVendedorMeta(v.id)
-            const pesos    = { peso_venda: metaLoja?.peso_venda || 40, peso_ticket: metaLoja?.peso_ticket || 30, peso_pa: metaLoja?.peso_pa || 30 }
-            const calc     = calcScore(st, meta, pesos)
+            const keysD = selDs.length > 0 ? selDs : allMonthKeys
+            const lcs   = lancamentos.filter(l => l.vendedor_id === v.id && keysD.includes(l.data))
+            const st    = aggregateLancamentos(lcs)
+            const meta  = getVendedorMeta(v.id)
+            const pesos = { peso_venda: metaLoja?.peso_venda || 40, peso_ticket: metaLoja?.peso_ticket || 30, peso_pa: metaLoja?.peso_pa || 30 }
+            const calc  = calcScore(st, meta, pesos)
             scoresDia[v.id] = {
               ...calc,
               scoreDisplay: calc.score,
               score: Math.min(calc.score, 100),
               vendas: st.vendas,
+              stats: st,
+              pesos,
             }
           })
 
@@ -756,53 +814,37 @@ export default function GerentePage() {
                   const act = selDs.includes(d.key)
                   return (
                     <button key={d.key} onClick={() => toggleDia(d.key)}
-                      className={`relative px-3 py-1.5 rounded-lg text-sm border transition-all ${act ? 'bg-stone-900 text-white border-stone-900' : 'bg-white text-stone-600 border-stone-200 hover:bg-stone-50'}`}>
+                      className={`relative px-3 py-1.5 rounded-lg text-sm border transition-all ${act ? 'bg-white text-black border-white' : 'bg-white/10 text-gray-300 border-white/20 hover:bg-white/20'}`}>
                       {String(d.date.getDate()).padStart(2,'0')}/{String(vM+1).padStart(2,'0')}
                       {isT && <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-blue-500" />}
-                      {has && !isT && <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-green-500" />}
+                      {has && !isT && <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-green-400" />}
                     </button>
                   )
                 })}
               </div>
 
-              <div className="card p-4">
-                <p className="section-title mb-4">Pista — {tituloSel}</p>
+              <div className="bg-white/5 border border-white/10 rounded-xl p-4">
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">Pista — {tituloSel}</p>
                 <RaceTrack vendedores={vendedores} scores={scoresDia} semanas={0} />
               </div>
 
               <div>
-                <p className="section-title">Vendas {selDs.length === 0 ? '(mês inteiro)' : selDs.length > 1 ? `(${selDs.length} dias)` : 'do Dia'}</p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 mt-3">
-                  {[...vendedores].map((v, i) => {
-                      const keysD2 = selDs.length > 0 ? selDs : allMonthKeys
-                      const sc  = scoresDia[v.id] || { score: 0, vendas: 0 }
-                      const lcsV = lancamentos.filter(l => l.vendedor_id === v.id && keysD2.includes(l.data))
-                      const stV  = aggregateLancamentos(lcsV)
-                      // cur para o modal de lançamento (sempre selD — único dia)
-                      const cur  = lancamentos.find(l => l.vendedor_id === v.id && l.data === selD)
-                      return { v, i, sc, stV, cur }
-                    })
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">
+                  Desempenho {selDs.length === 0 ? '(mês inteiro)' : selDs.length > 1 ? `(${selDs.length} dias)` : 'do Dia'}
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                  {[...vendedores]
+                    .map(v => ({ v, sc: scoresDia[v.id] || { score: 0, scoreDisplay: 0, pv: 0, pt: 0, pp: 0, stats: { vendas: 0, atendimentos: 0, pecas: 0, ticket: 0 }, pesos: {} } }))
                     .sort((a, b) => (b.sc.scoreDisplay ?? b.sc.score) - (a.sc.scoreDisplay ?? a.sc.score))
-                    .map(({ v, i, sc, stV, cur }, r) => {
-                      const c = getCor(i)
+                    .map(({ v, sc }, r) => {
+                      const meta = getVendedorMeta(v.id)
                       return (
-                        <div key={v.id} className="card p-4">
-                          <div className="flex items-center gap-2.5 mb-3">
-                            <Avatar nome={v.nome} fotoUrl={v.foto_url} index={i} size={34} />
-                            <div className="flex-1 min-w-0">
-                              <p className="font-semibold text-sm text-stone-900 truncate">{v.nome}</p>
-                            </div>
-                            <span className="text-base font-extrabold" style={{ color: c.border }}>{MEDALS[r] || `${r+1}º`}</span>
-                          </div>
-                          {stV.vendas > 0 ? (
-                            <div className="space-y-1 mb-3">
-                              <div className="flex justify-between text-xs"><span className="text-stone-400">Vendas</span><span className="font-bold">{fmtR(stV.vendas)}</span></div>
-                              <div className="flex justify-between text-xs"><span className="text-stone-400">Atend.</span><span className="font-bold">{stV.atendimentos}</span></div>
-                              <div className="flex justify-between text-xs"><span className="text-stone-400">Peças</span><span className="font-bold">{stV.pecas}</span></div>
-                              <div className="flex justify-between text-xs"><span className="text-stone-400">Score</span><span className="font-bold" style={{ color: c.border }}>{(sc.scoreDisplay ?? sc.score).toFixed(1)}%</span></div>
-                            </div>
-                          ) : <p className="text-xs text-stone-400 mb-3">Sem lançamento.</p>}
-                        </div>
+                        <ScoreCard key={v.id}
+                          vendedor={{ ...v, meta }}
+                          stats={sc.stats}
+                          scored={sc}
+                          index={r}
+                        />
                       )
                     })}
                 </div>
@@ -1235,6 +1277,47 @@ export default function GerentePage() {
           </div>
         </div>
       )}
-    </div>
+
+      {/* 💥 Efeito de ultrapassagem */}
+      <AnimatePresence>
+        {ultrapassou && (
+          <>
+            {/* Flash */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 0.5 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-yellow-400 z-50 pointer-events-none"
+            />
+
+            {/* Texto */}
+            <motion.div
+              initial={{ scale: 0 }}
+              animate={{ scale: 1.5 }}
+              exit={{ scale: 0 }}
+              className="fixed inset-0 flex items-center justify-center z-50 pointer-events-none"
+            >
+              <div className="text-5xl font-extrabold text-yellow-300 drop-shadow-lg">
+                🏆 ULTRAPASSOU!
+              </div>
+            </motion.div>
+
+            {/* Confete */}
+            <div className="fixed inset-0 pointer-events-none z-50">
+              {[...Array(25)].map((_, i) => (
+                <motion.div
+                  key={i}
+                  initial={{ y: -50, x: Math.random() * (typeof window !== 'undefined' ? window.innerWidth : 400) }}
+                  animate={{ y: typeof window !== 'undefined' ? window.innerHeight : 800, opacity: 0 }}
+                  transition={{ duration: 1 + Math.random() }}
+                  className="absolute w-2 h-2 bg-yellow-300 rounded"
+                />
+              ))}
+            </div>
+          </>
+        )}
+      </AnimatePresence>
+
+    </motion.div>
   )
 }

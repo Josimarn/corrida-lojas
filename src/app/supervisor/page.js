@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase-browser'
-import NavBar from '@/components/NavBar'
+import HeaderAbsurdo from '@/components/HeaderAbsurdo'
 import RaceTrack from '@/components/RaceTrack'
 import ScoreCard from '@/components/ScoreCard'
 import CardsDesempenho from '@/components/CardsDesempenho'
@@ -106,33 +106,33 @@ function LojaCard({ loja, dados, index }) {
     return (
       <div className="space-y-1">
         <div className="flex justify-between text-xs">
-          <span className="text-stone-400">{label}</span>
-          <span className="font-semibold text-stone-700">{fmtPct(pct)}</span>
+          <span className="text-gray-400">{label}</span>
+          <span className="font-semibold" style={{ color }}>{fmtPct(pct)}</span>
         </div>
-        <div className="h-1.5 bg-stone-100 rounded-full overflow-hidden">
+        <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
           <div className="h-full rounded-full transition-all duration-500"
             style={{ width: `${Math.min(pct, 100)}%`, background: color }} />
         </div>
-        <div className="text-xs text-stone-400">{value} / {metaVal}</div>
+        <div className="text-xs text-gray-500">{value} / {metaVal}</div>
       </div>
     )
   }
 
   return (
-    <div className={`card p-4 ${atingiu ? 'ring-2 ring-green-300' : ''}`}>
+    <div className={`p-4 rounded-xl border ${atingiu ? 'border-green-400/30 bg-green-500/10' : 'bg-white/5 border-white/10'}`}>
       <div className="flex items-center gap-2.5 mb-3">
         <div className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0"
           style={{ background: c.bg, color: c.border }}>
           {loja.nome.split(' ').map(w => w[0]).join('').slice(0, 2)}
         </div>
         <div className="min-w-0 flex-1">
-          <p className="font-semibold text-sm text-stone-900 truncate">{loja.nome}</p>
-          {loja.cidade && <p className="text-xs text-stone-400">{loja.cidade}</p>}
-          {atingiu && <span className="text-xs font-bold text-green-600">Meta atingida! 🏆</span>}
+          <p className="font-semibold text-sm text-white truncate">{loja.nome}</p>
+          {loja.cidade && <p className="text-xs text-gray-400">{loja.cidade}</p>}
+          {atingiu && <span className="text-xs font-bold text-green-400">Meta atingida! 🏆</span>}
         </div>
         <div className="ml-auto text-right">
           <p className="text-xl font-extrabold" style={{ color: c.border }}>{fmtPct(score)}</p>
-          <p className="text-xs text-stone-400">score</p>
+          <p className="text-xs text-gray-400">score</p>
         </div>
       </div>
 
@@ -141,23 +141,31 @@ function LojaCard({ loja, dados, index }) {
           pct={pv} value={fmtR(st.vendas)} metaVal={fmtR(meta?.meta_total || 0)} color={c.fill} />
       </div>
 
-      <div className="grid grid-cols-3 gap-1.5 mt-3 pt-3 border-t border-stone-100">
+      <div className="grid grid-cols-3 gap-1.5 mt-3 pt-3 border-t border-white/10">
         <div className="text-center">
-          <p className="text-xs text-stone-400">Atend.</p>
-          <p className="text-sm font-bold text-stone-800">{st.atendimentos}</p>
+          <p className="text-xs text-gray-400">Atend.</p>
+          <p className="text-sm font-bold text-white">{st.atendimentos}</p>
         </div>
         <div className="text-center">
-          <p className="text-xs text-stone-400">Peças</p>
-          <p className="text-sm font-bold text-stone-800">{st.pecas}</p>
+          <p className="text-xs text-gray-400">Peças</p>
+          <p className="text-sm font-bold text-white">{st.pecas}</p>
         </div>
         <div className="text-center">
-          <p className="text-xs text-stone-400">Ticket</p>
-          <p className="text-sm font-bold text-stone-800">{fmtR(st.ticket)}</p>
+          <p className="text-xs text-gray-400">Ticket</p>
+          <p className="text-sm font-bold text-white">{fmtR(st.ticket)}</p>
         </div>
       </div>
     </div>
   )
 }
+
+const TABS_SUPERVISOR = [
+  { key: 'lojas',      label: '🏪 Corrida',   activeClass: 'bg-white text-black' },
+  { key: 'vendedores', label: '👤 Vendedores', activeClass: 'bg-white text-black' },
+  { key: 'diaria',     label: '📅 Diário',    activeClass: 'bg-white text-black' },
+  { key: 'anual',      label: '📈 Anual',     activeClass: 'bg-white text-black' },
+  { key: 'guerra',     label: '⚔️ Guerra',    activeClass: 'bg-red-600 text-white' },
+]
 
 const TODAY = new Date()
 
@@ -255,23 +263,15 @@ export default function SupervisorPage() {
     setSelDs([toDateKey(new Date(ny, nm, new Date().getDate()))])
   }
 
-  // KPIs consolidados
-  const kpiTotal = lojas.reduce((acc, loja) => {
-    const d = lojaData[loja.id] || { lancamentos: [], vendedores: [] }
-    acc.vendas     += d.lancamentos.reduce((s, l) => s + (l.vendas || 0), 0)
-    acc.vendedores += d.vendedores.length
-    return acc
-  }, { vendas: 0, vendedores: 0 })
-
   // Score por loja (para a pista de lojas)
   const lojasParaPista = lojas.map(l => ({ id: l.id, nome: l.nome, foto_url: null }))
   const scoresLojas = {}
   const weekNumberLojas = getWeekNumber(vY, vM)
   lojas.forEach(loja => {
     const d = lojaData[loja.id] || { lancamentos: [], metaLoja: null }
-    const totalVendas = d.lancamentos.reduce((s, l) => s + (l.vendas || 0), 0)
+    const tv = d.lancamentos.reduce((s, l) => s + (l.vendas || 0), 0)
     const meta = d.metaLoja?.meta_total || 0
-    const rawScore = meta > 0 ? Math.round((totalVendas / meta) * 1000) / 10 : 0
+    const rawScore = meta > 0 ? Math.round((tv / meta) * 1000) / 10 : 0
     scoresLojas[loja.id] = { scoreDisplay: rawScore, score: applyWeekPos(rawScore, weekNumberLojas) }
   })
 
@@ -279,79 +279,80 @@ export default function SupervisorPage() {
   const todayKey = toDateKey(TODAY)
 
   if (loading) return (
-    <div className="min-h-screen flex items-center justify-center">
-      <div className="text-stone-400 text-sm">Carregando...</div>
+    <div className="min-h-screen flex items-center justify-center bg-[#0b1220]">
+      <div className="text-gray-400 text-sm">Carregando...</div>
     </div>
   )
 
-  return (
-    <div className="min-h-screen bg-stone-100">
-      <NavBar usuario={usuario} titulo="Coordenador Regional" subtitulo={`${lojas.length} loja${lojas.length !== 1 ? 's' : ''} supervisionada${lojas.length !== 1 ? 's' : ''}`} />
+  // ── KPIs para o header ──
+  const todayKey2   = toDateKey(TODAY)
+  const ontemDate   = new Date(TODAY); ontemDate.setDate(ontemDate.getDate() - 1)
+  const ontemKey    = toDateKey(ontemDate)
+  const totalVendas = lojas.reduce((s, l) => {
+    const d = lojaData[l.id] || { lancamentos: [] }
+    return s + d.lancamentos.reduce((ss, lc) => ss + (lc.vendas || 0), 0)
+  }, 0)
+  const metaTotal = lojas.reduce((s, l) => s + (lojaData[l.id]?.metaLoja?.meta_total || 0), 0)
+  const atingimento = metaTotal > 0 ? (totalVendas / metaTotal) * 100 : 0
+  const vendasHoje = lojas.reduce((s, l) => {
+    const d = lojaData[l.id] || { lancamentos: [] }
+    return s + d.lancamentos.filter(lc => lc.data === todayKey2).reduce((ss, lc) => ss + (lc.vendas || 0), 0)
+  }, 0)
+  const vendasOntem = lojas.reduce((s, l) => {
+    const d = lojaData[l.id] || { lancamentos: [] }
+    return s + d.lancamentos.filter(lc => lc.data === ontemKey).reduce((ss, lc) => ss + (lc.vendas || 0), 0)
+  }, 0)
+  const totalVendedores = lojas.reduce((s, l) => s + (lojaData[l.id]?.vendedores?.length || 0), 0)
+  const rankingInsights = lojas.map(l => {
+    const d = lojaData[l.id] || { lancamentos: [], metaLoja: null }
+    const tv = d.lancamentos.reduce((s, lc) => s + (lc.vendas || 0), 0)
+    const pct = d.metaLoja?.meta_total > 0 ? Math.round(tv / d.metaLoja.meta_total * 1000) / 10 : 0
+    return { id: l.id, nome: l.nome, percentual: pct, totalVendas: tv }
+  }).sort((a, b) => b.percentual - a.percentual)
 
+  return (
+    <div className="min-h-screen bg-[#0b1220] text-white">
       <main className="max-w-6xl mx-auto px-4 py-5 space-y-5">
 
-        {/* KPIs */}
-        <div className="grid grid-cols-3 gap-3">
-          {[
-            ['Vendas no Mês', fmtR(kpiTotal.vendas), 'todas as lojas'],
-            ['Lojas',         lojas.length,           'supervisionadas'],
-            ['Vendedores',    kpiTotal.vendedores,     'ativos'],
-          ].map(([l, v, s]) => (
-            <div key={l} className="card p-4 text-center">
-              <p className="text-xs text-stone-400">{l}</p>
-              <p className="text-xl font-extrabold text-stone-900 mt-0.5">{v}</p>
-              <p className="text-xs text-stone-400">{s}</p>
-            </div>
-          ))}
-        </div>
-
-        {/* Nav mês + toggle de visão */}
-        <div className="flex items-center justify-between gap-3 flex-wrap">
-          {visao !== 'anual' && (
-            <div className="flex items-center gap-3">
-              <button onClick={() => changeMonth(-1)} className="btn-secondary px-3 py-2 text-lg">‹</button>
-              <h2 className="text-lg font-bold text-stone-900">{MESES[vM]} {vY}</h2>
-              <button onClick={() => changeMonth(1)}  className="btn-secondary px-3 py-2 text-lg">›</button>
-            </div>
-          )}
-
-          {/* Toggle */}
-          <div className="flex gap-2 flex-wrap">
-            {[
-              ['lojas',      '🏪 Corrida das Lojas'],
-              ['vendedores', '👤 Vendedores por Loja'],
-              ['diaria',     '🏁 Diária'],
-              ['anual',      '📊 Anual'],
-            ].map(([v, label]) => (
-              <button key={v} onClick={() => setVisao(v)}
-                className={`px-4 py-1.5 rounded-lg text-sm border transition-all ${visao === v ? 'bg-stone-900 text-white border-stone-900' : 'bg-white text-stone-600 border-stone-200 hover:bg-stone-50'}`}>
-                {label}
-              </button>
-            ))}
-            <button onClick={() => setVisao('guerra')}
-              className={`px-4 py-1.5 rounded-lg text-sm border transition-all ${visao === 'guerra' ? 'bg-red-600 text-white border-red-600' : 'bg-white text-stone-600 border-stone-200 hover:bg-stone-50'}`}>
-              ⚔️ Sala de Guerra
-            </button>
-            <Link href="/supervisor/tv" target="_blank"
-              className="px-4 py-1.5 rounded-lg text-sm border transition-all bg-white text-stone-600 border-stone-200 hover:bg-stone-50">
-              📺 TV
-            </Link>
-          </div>
-        </div>
+        <HeaderAbsurdo
+          titulo="🗺️ Coordenação Regional"
+          subtitulo={`${lojas.length} loja${lojas.length !== 1 ? 's' : ''} supervisionada${lojas.length !== 1 ? 's' : ''} • atualização em tempo real`}
+          perfil="Coordenador"
+          perfilCor="bg-blue-500/20 text-blue-300"
+          totalVendas={totalVendas}
+          metaTotal={metaTotal}
+          atingimento={atingimento}
+          vendedores={totalVendedores}
+          ranking={rankingInsights}
+          mesLabel={`${MESES[vM]} ${vY}`}
+          visao={visao}
+          setVisao={setVisao}
+          onPrev={() => changeMonth(-1)}
+          onNext={() => changeMonth(1)}
+          onSair={() => router.replace('/')}
+          vendasHoje={vendasHoje}
+          vendasOntem={vendasOntem}
+          labelVendas="Vendas da Regional"
+          labelMeta="Meta da Regional"
+          labelAting="regional no mês"
+          labelVend="Vendedores"
+          tvHref="/supervisor/tv"
+          tabs={TABS_SUPERVISOR}
+        />
 
         {/* ── VISÃO: CORRIDA DAS LOJAS ── */}
         {visao === 'lojas' && (
           <>
-            <div className="card p-4">
-              <p className="section-title mb-4">Pista das Lojas — {MESES[vM]} {vY}</p>
+            <div className="bg-white/5 border border-white/10 rounded-xl p-4">
+              <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">Pista das Lojas — {MESES[vM]} {vY}</p>
               <RaceTrack vendedores={lojasParaPista} scores={scoresLojas} semanas={4} />
             </div>
 
             {(() => {
               const rankLojas = [...lojas].map(loja => {
                 const d = lojaData[loja.id] || { lancamentos: [], metaLoja: null }
-                const totalVendas = d.lancamentos.reduce((s, l) => s + (l.vendas || 0), 0)
-                const score = d.metaLoja?.meta_total > 0 ? Math.round(totalVendas / d.metaLoja.meta_total * 1000) / 10 : 0
+                const tv = d.lancamentos.reduce((s, l) => s + (l.vendas || 0), 0)
+                const score = d.metaLoja?.meta_total > 0 ? Math.round(tv / d.metaLoja.meta_total * 1000) / 10 : 0
                 return { id: loja.id, nome: loja.nome, percentual: score }
               }).sort((a, b) => b.percentual - a.percentual)
 
@@ -364,7 +365,7 @@ export default function SupervisorPage() {
               return (
                 <>
                   <div className="bg-[#0f172a] rounded-xl p-5">
-                    <p className="text-sm font-bold text-white/50 uppercase tracking-widest mb-1">Desempenho das Lojas</p>
+                    <p className="text-xs font-bold text-white/50 uppercase tracking-widest mb-1">Desempenho das Lojas</p>
                     <CardsDesempenho ranking={rankLojas} lojaData={lojaDataEnriquecido} />
                   </div>
                   <div className="bg-[#0f172a] rounded-xl p-5">
@@ -382,7 +383,7 @@ export default function SupervisorPage() {
             <div className="flex flex-wrap gap-2">
               {lojas.map(l => (
                 <button key={l.id} onClick={() => setSelLoja(l.id)}
-                  className={`px-3 py-1.5 rounded-lg text-sm border transition-all ${l.id === selLoja ? 'bg-stone-900 text-white border-stone-900' : 'bg-white text-stone-600 border-stone-200 hover:bg-stone-50'}`}>
+                  className={`px-3 py-1.5 rounded-lg text-sm border transition-all ${l.id === selLoja ? 'bg-white text-black border-white' : 'bg-white/10 text-gray-300 border-white/20 hover:bg-white/20'}`}>
                   {l.nome}
                   {l.cidade && <span className="text-xs opacity-60 ml-1">{l.cidade}</span>}
                 </button>
@@ -391,10 +392,10 @@ export default function SupervisorPage() {
 
             {selLoja && (
               <>
-                <div className="card p-4">
+                <div className="bg-white/5 border border-white/10 rounded-xl p-4">
                   <div className="flex items-center justify-between mb-4">
-                    <p className="section-title">{lojas.find(l => l.id === selLoja)?.nome} — Pista do Mês</p>
-                    <span className="text-xs text-stone-400">
+                    <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">{lojas.find(l => l.id === selLoja)?.nome} — Pista do Mês</p>
+                    <span className="text-xs text-gray-400">
                       Meta: {dadosLojaSel.metaLoja ? fmtR(dadosLojaSel.metaLoja.meta_total) : '—'}
                     </span>
                   </div>
@@ -402,7 +403,7 @@ export default function SupervisorPage() {
                 </div>
 
                 <div>
-                  <p className="section-title">Desempenho dos Vendedores</p>
+                  <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">Desempenho dos Vendedores</p>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 mt-3">
                     {[...dadosLojaSel.vendedores]
                       .map((v, i) => ({ v, i }))
@@ -420,8 +421,8 @@ export default function SupervisorPage() {
                   </div>
                 </div>
 
-                <div className="card p-4">
-                  <p className="section-title">Classificação</p>
+                <div className="bg-white/5 border border-white/10 rounded-xl p-4">
+                  <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">Classificação</p>
                   <div className="space-y-2 mt-3">
                     {[...dadosLojaSel.vendedores]
                       .map((v, i) => ({ v, i, score: dadosLojaSel.scores[v.id]?.scoreDisplay ?? dadosLojaSel.scores[v.id]?.score ?? 0 }))
@@ -429,9 +430,9 @@ export default function SupervisorPage() {
                       .map(({ v, i, score }, r) => {
                         const c = getCor(i)
                         return (
-                          <div key={v.id} className="flex items-center gap-3 py-2 border-b border-stone-100 last:border-0">
+                          <div key={v.id} className="flex items-center gap-3 py-2 border-b border-white/10 last:border-0">
                             <span className="text-lg min-w-[24px]">{MEDALS[r] || `${r + 1}º`}</span>
-                            <div className="flex-1 text-sm font-semibold text-stone-900">{v.nome}</div>
+                            <div className="flex-1 text-sm font-semibold text-white">{v.nome}</div>
                             <div className="text-base font-extrabold" style={{ color: c.border }}>{score.toFixed(1)}%</div>
                           </div>
                         )
@@ -478,7 +479,7 @@ export default function SupervisorPage() {
                       setSelDs(prev => prev.includes(d.key) ? prev.filter(k => k !== d.key) : [...prev, d.key])
                       setSelD(d.key)
                     }}
-                      className={`relative px-3 py-1.5 rounded-lg text-sm border transition-all ${act ? 'bg-stone-900 text-white border-stone-900' : 'bg-white text-stone-600 border-stone-200 hover:bg-stone-50'}`}>
+                      className={`relative px-3 py-1.5 rounded-lg text-sm border transition-all ${act ? 'bg-white text-black border-white' : 'bg-white/10 text-gray-300 border-white/20 hover:bg-white/20'}`}>
                       {String(d.date.getDate()).padStart(2,'0')}/{String(vM+1).padStart(2,'0')}
                       {isT && <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-blue-500" />}
                       {has && !isT && <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-green-500" />}
@@ -487,13 +488,15 @@ export default function SupervisorPage() {
                 })}
               </div>
 
-              <div className="card p-4">
-                <p className="section-title mb-4">Pista — {tituloSel}</p>
+              <div className="bg-white/5 border border-white/10 rounded-xl p-4">
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">Pista — {tituloSel}</p>
                 <RaceTrack vendedores={lojasParaPista} scores={scoresLojasDia} semanas={0} />
               </div>
 
               <div>
-                <p className="section-title">Vendas {selDs.length > 1 ? `(${selDs.length} dias)` : selDs.length === 1 ? 'do Dia' : '(mês inteiro)'} por Loja</p>
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">
+                  Vendas {selDs.length > 1 ? `(${selDs.length} dias)` : selDs.length === 1 ? 'do Dia' : '(mês inteiro)'} por Loja
+                </p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 mt-3">
                   {[...lojas]
                     .map((loja, i) => ({ loja, i, sc: scoresLojasDia[loja.id] || { score: 0, vendas: 0 } }))
@@ -504,25 +507,25 @@ export default function SupervisorPage() {
                       const lcs = (d.lancamentos || []).filter(l => keysAtivos.includes(l.data))
                       const st  = aggregateLancamentos(lcs)
                       return (
-                        <div key={loja.id} className="card p-4">
+                        <div key={loja.id} className="bg-white/5 border border-white/10 rounded-xl p-4">
                           <div className="flex items-center gap-2.5 mb-3">
                             <div className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0"
                               style={{ background: c.bg, color: c.border }}>
                               {loja.nome.split(' ').map(w => w[0]).join('').slice(0, 2)}
                             </div>
                             <div className="flex-1 min-w-0">
-                              <p className="font-semibold text-sm text-stone-900 truncate">{loja.nome}</p>
-                              {loja.cidade && <p className="text-xs text-stone-400">{loja.cidade}</p>}
+                              <p className="font-semibold text-sm text-white truncate">{loja.nome}</p>
+                              {loja.cidade && <p className="text-xs text-gray-400">{loja.cidade}</p>}
                             </div>
                             <span className="text-base font-extrabold" style={{ color: c.border }}>{MEDALS[r] || `${r+1}º`}</span>
                           </div>
                           {st.vendas > 0 ? (
                             <div className="space-y-1 mb-2">
-                              <div className="flex justify-between text-xs"><span className="text-stone-400">Vendas</span><span className="font-bold">{fmtR(st.vendas)}</span></div>
-                              <div className="flex justify-between text-xs"><span className="text-stone-400">Atend.</span><span className="font-bold">{st.atendimentos}</span></div>
-                              <div className="flex justify-between text-xs"><span className="text-stone-400">Peças</span><span className="font-bold">{st.pecas}</span></div>
+                              <div className="flex justify-between text-xs"><span className="text-gray-400">Vendas</span><span className="font-bold text-white">{fmtR(st.vendas)}</span></div>
+                              <div className="flex justify-between text-xs"><span className="text-gray-400">Atend.</span><span className="font-bold text-white">{st.atendimentos}</span></div>
+                              <div className="flex justify-between text-xs"><span className="text-gray-400">Peças</span><span className="font-bold text-white">{st.pecas}</span></div>
                             </div>
-                          ) : <p className="text-xs text-stone-400 mb-2">Sem lançamento.</p>}
+                          ) : <p className="text-xs text-gray-400 mb-2">Sem lançamento.</p>}
                           <p className="text-xs font-bold text-right" style={{ color: c.border }}>{fmtPct(sc.scoreDisplay ?? sc.score)}</p>
                         </div>
                       )
@@ -545,18 +548,18 @@ export default function SupervisorPage() {
           return (
             <>
               <div className="flex flex-wrap items-center gap-2">
-                <span className="text-xs text-stone-400 font-medium">Comparar anos:</span>
+                <span className="text-xs text-gray-400 font-medium">Comparar anos:</span>
                 {anosDisponiveis.map((ano, ai) => (
                   <button key={ano} onClick={() => toggleAno(ano)}
-                    className={`px-4 py-1.5 rounded-lg text-sm border font-semibold transition-all ${anossel.includes(ano) ? 'text-white' : 'bg-white text-stone-500 border-stone-200'}`}
+                    className={`px-4 py-1.5 rounded-lg text-sm border font-semibold transition-all ${anossel.includes(ano) ? 'text-white' : 'bg-white/10 text-gray-300 border-white/20'}`}
                     style={anossel.includes(ano) ? { background: coresAnos[ai], borderColor: coresAnos[ai] } : {}}>
                     {ano}
                   </button>
                 ))}
               </div>
 
-              <div className="card p-4">
-                <p className="section-title mb-4">Vendas por Mês — {anossel.join(' vs ')}</p>
+              <div className="bg-white/5 border border-white/10 rounded-xl p-4">
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">Vendas por Mês — {anossel.join(' vs ')}</p>
                 <div className="space-y-4">
                   {MESES.map((nomeMes, mi) => {
                     const mes = mi + 1
@@ -565,7 +568,7 @@ export default function SupervisorPage() {
                     return (
                       <div key={mes} className={allFut ? 'opacity-30' : ''}>
                         <div className="flex items-center justify-between text-xs mb-1.5">
-                          <span className={`font-medium w-20 ${isCur ? 'text-blue-600 font-bold' : 'text-stone-600'}`}>{nomeMes}{isCur && ' ●'}</span>
+                          <span className={`font-medium w-20 ${isCur ? 'text-blue-400 font-bold' : 'text-gray-300'}`}>{nomeMes}{isCur && ' ●'}</span>
                           <div className="flex gap-3 flex-wrap justify-end">
                             {anossel.map((ano) => {
                               const d = dadosAnual[ano]?.[mes] || { vendas: 0, meta: 0 }
@@ -583,7 +586,7 @@ export default function SupervisorPage() {
                             const d = dadosAnual[ano]?.[mes] || { vendas: 0, meta: 0 }
                             const pct = d.meta > 0 ? Math.min(d.vendas / d.meta * 100, 100) : 0
                             return (
-                              <div key={ano} className="h-2.5 bg-stone-100 rounded-full overflow-hidden">
+                              <div key={ano} className="h-2.5 bg-white/10 rounded-full overflow-hidden">
                                 <div className="h-full rounded-full transition-all duration-700"
                                   style={{ width: `${pct}%`, background: coresAnos[anosDisponiveis.indexOf(ano)] }} />
                               </div>
@@ -596,8 +599,8 @@ export default function SupervisorPage() {
                 </div>
               </div>
 
-              <div className="card p-4">
-                <p className="section-title mb-4">Atingimento por Loja e Mês</p>
+              <div className="bg-white/5 border border-white/10 rounded-xl p-4">
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">Atingimento por Loja e Mês</p>
                 {anossel.map((ano) => {
                   const cor = coresAnos[anosDisponiveis.indexOf(ano)]
                   const totalAno = lojas.reduce((s, loja) => s + Object.values(dadosAnual[ano] || {}).reduce((ss, m) => ss + (m.porLoja?.[loja.id]?.vendas || 0), 0), 0)
@@ -610,7 +613,7 @@ export default function SupervisorPage() {
                       <div className="overflow-x-auto">
                         <table className="w-full text-xs">
                           <thead>
-                            <tr className="text-left text-stone-400 border-b border-stone-100">
+                            <tr className="text-left text-gray-400 border-b border-white/10">
                               <th className="pb-1.5 pr-4 font-medium">Loja</th>
                               {MESES.map((m, i) => <th key={i} className="pb-1.5 text-center px-1 font-medium">{m.slice(0,3)}</th>)}
                               <th className="pb-1.5 text-right pl-2 font-medium">Total</th>
@@ -621,7 +624,7 @@ export default function SupervisorPage() {
                               const c = getCor(li)
                               const totalL = Object.values(dadosAnual[ano] || {}).reduce((s, m) => s + (m.porLoja?.[loja.id]?.vendas || 0), 0)
                               return (
-                                <tr key={loja.id} className="border-b border-stone-50 last:border-0">
+                                <tr key={loja.id} className="border-b border-white/5 last:border-0">
                                   <td className="py-1.5 pr-4 font-semibold truncate max-w-[80px]" style={{ color: c.border }}>{loja.nome.split(' ')[0]}</td>
                                   {MESES.map((_, mi) => {
                                     const mes = mi + 1
@@ -630,14 +633,14 @@ export default function SupervisorPage() {
                                     const p   = mm > 0 ? vv / mm * 100 : 0
                                     const fut = ano === TODAY.getFullYear() && mi > TODAY.getMonth()
                                     return (
-                                      <td key={mi} className={`py-1.5 text-center px-1 ${fut ? 'text-stone-200' : ''}`}>
+                                      <td key={mi} className={`py-1.5 text-center px-1 ${fut ? 'text-white/20' : ''}`}>
                                         {vv > 0
-                                          ? <span className={`font-bold ${p >= 100 ? 'text-green-600' : p >= 80 ? 'text-amber-600' : 'text-stone-600'}`}>{fmtPct(p)}</span>
-                                          : <span className="text-stone-300">—</span>}
+                                          ? <span className={`font-bold ${p >= 100 ? 'text-green-400' : p >= 80 ? 'text-amber-400' : 'text-gray-300'}`}>{fmtPct(p)}</span>
+                                          : <span className="text-white/20">—</span>}
                                       </td>
                                     )
                                   })}
-                                  <td className="py-1.5 text-right pl-2 font-bold text-stone-800">{fmtR(totalL)}</td>
+                                  <td className="py-1.5 text-right pl-2 font-bold text-white">{fmtR(totalL)}</td>
                                 </tr>
                               )
                             })}

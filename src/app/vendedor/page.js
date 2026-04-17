@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClientComponent } from '@/lib/supabase-browser'
 import Avatar from '@/components/Avatar'
@@ -96,6 +96,7 @@ export default function VendedorPage() {
   const [vM,           setVM]           = useState(TODAY.getMonth())
   const [ultrapassou,  setUltrapassou]  = useState(false)
   const [prevPos,      setPrevPos]      = useState(null)
+  const audioRef = useRef(null)
 
   // ── data fetch ──
   const load = useCallback(async () => {
@@ -162,6 +163,10 @@ export default function VendedorPage() {
   useEffect(() => {
     if (prevPos !== null && minhaPosicao > 0 && minhaPosicao < prevPos) {
       setUltrapassou(true)
+      if (audioRef.current) {
+        audioRef.current.currentTime = 0
+        audioRef.current.play().catch(() => {})
+      }
       setTimeout(() => setUltrapassou(false), 2500)
     }
     if (minhaPosicao > 0) setPrevPos(minhaPosicao)
@@ -221,7 +226,13 @@ export default function VendedorPage() {
   )
 
   return (
-    <div className="min-h-screen bg-[#070F1F] text-white">
+    <motion.div
+      animate={ultrapassou ? { x: [0, -10, 10, -10, 10, 0] } : {}}
+      transition={{ duration: 0.4 }}
+      className="min-h-screen bg-[#070F1F] text-white"
+    >
+
+      <audio ref={audioRef} src="/sounds/overtake.mp3" preload="auto" />
 
       {/* Header */}
       <div className="max-w-2xl mx-auto px-4 pt-5 flex justify-between items-center mb-5">
@@ -274,19 +285,6 @@ export default function VendedorPage() {
           <p className="text-xs text-black/50 mt-2">{insight}</p>
         </motion.div>
 
-        {/* Efeito ultrapassagem */}
-        <AnimatePresence>
-          {ultrapassou && (
-            <motion.div
-              initial={{ scale: 0, opacity: 0 }}
-              animate={{ scale: 1.1, opacity: 1 }}
-              exit={{ scale: 0, opacity: 0 }}
-              className="text-center text-3xl font-extrabold text-yellow-400 py-2"
-            >
-              🏆 ULTRAPASSOU!
-            </motion.div>
-          )}
-        </AnimatePresence>
 
         {/* Alerta do dia */}
         {alertaDia && (
@@ -469,6 +467,47 @@ export default function VendedorPage() {
         </div>
 
       </main>
-    </div>
+
+      {/* 💥 Efeito de ultrapassagem */}
+      <AnimatePresence>
+        {ultrapassou && (
+          <>
+            {/* Flash */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 0.5 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-yellow-400 z-50 pointer-events-none"
+            />
+
+            {/* Texto */}
+            <motion.div
+              initial={{ scale: 0 }}
+              animate={{ scale: 1.5 }}
+              exit={{ scale: 0 }}
+              className="fixed inset-0 flex items-center justify-center z-50 pointer-events-none"
+            >
+              <div className="text-5xl font-extrabold text-yellow-300 drop-shadow-lg">
+                🏆 ULTRAPASSOU!
+              </div>
+            </motion.div>
+
+            {/* Confete */}
+            <div className="fixed inset-0 pointer-events-none z-50">
+              {[...Array(25)].map((_, i) => (
+                <motion.div
+                  key={i}
+                  initial={{ y: -50, x: Math.random() * (typeof window !== 'undefined' ? window.innerWidth : 400) }}
+                  animate={{ y: typeof window !== 'undefined' ? window.innerHeight : 800, opacity: 0 }}
+                  transition={{ duration: 1 + Math.random() }}
+                  className="absolute w-2 h-2 bg-yellow-300 rounded"
+                />
+              ))}
+            </div>
+          </>
+        )}
+      </AnimatePresence>
+
+    </motion.div>
   )
 }

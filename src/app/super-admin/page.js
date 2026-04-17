@@ -2,7 +2,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClientComponent } from '@/lib/supabase-browser'
-import NavBar from '@/components/NavBar'
 
 const PERFIS_SISTEMA = ['super_admin', 'admin_cliente', 'dono', 'coordenador', 'gerente', 'vendedor']
 const PERFIL_LABEL = {
@@ -280,20 +279,50 @@ async function criarUsuario() {
 })
 
   if (loading) return (
-    <div className="min-h-screen flex items-center justify-center">
-      <div className="text-stone-400 text-sm">Carregando...</div>
+    <div className="min-h-screen flex items-center justify-center bg-[#0b1220]">
+      <div className="text-gray-400 text-sm">Carregando...</div>
     </div>
   )
 
   return (
-    <div className="min-h-screen bg-stone-100">
-      <NavBar usuario={usuario} titulo="Super Admin" subtitulo="Gestão do sistema" />
-
+    <div className="min-h-screen bg-[#0b1220] text-white">
       <main className="max-w-6xl mx-auto px-4 py-5 space-y-5">
 
-        {/* Filtro de empresa do dashboard */}
-        <div className="flex items-center gap-3">
-          <div className="flex-1">
+        {/* Header */}
+        <div className="mb-2">
+          <div className="flex justify-between items-center mb-4">
+            <div>
+              <h1 className="text-2xl font-bold text-white">🛡️ Super Admin</h1>
+              <p className="text-sm text-gray-400">Gestão do sistema • {empresas.length} empresa{empresas.length !== 1 ? 's' : ''}</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="px-3 py-1 rounded-full text-xs font-medium bg-purple-500/20 text-purple-300">
+                Super Admin
+              </span>
+              <button onClick={() => router.replace('/')} className="px-3 py-1 bg-white/10 hover:bg-white/20 rounded text-sm text-white transition-all">
+                Sair
+              </button>
+            </div>
+          </div>
+
+          {/* KPIs */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+            {[
+              ['Empresas', kpi.empresas,  empSelecionada ? 'selecionada' : 'cadastradas', 'text-green-400'],
+              ['Lojas',    kpi.lojas,     'ativas',                                        'text-white'],
+              ['Usuários', kpi.usuarios,  'total',                                         'text-white'],
+              ['Ativos',   kpi.ativos,    'no sistema',                                    'text-white'],
+            ].map(([l, v, s, cls]) => (
+              <div key={l} className="p-4 rounded-xl bg-white/5 border border-white/10">
+                <p className="text-xs text-gray-400">{l}</p>
+                <p className={`text-xl font-bold ${cls}`}>{v}</p>
+                <p className="text-xs text-gray-500">{s}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* Filtro de empresa */}
+          <div className="flex items-center gap-3 mb-4">
             <select value={empSelecionada?.id || ''}
               onChange={ev => {
                 const val = ev.target.value
@@ -301,84 +330,68 @@ async function criarUsuario() {
                 const found = empresas.find(e => e.id === val)
                 if (found) setEmpSelecionada(found)
               }}
-              className="w-full sm:w-72 text-sm border border-stone-200 rounded-xl px-3 py-2 bg-white text-stone-700 shadow-sm">
+              className="w-full sm:w-72 text-sm border border-white/20 rounded-xl px-3 py-2 bg-white/10 text-white">
               <option value="">Todas as empresas</option>
               {empresas.map(e => <option key={e.id} value={e.id}>{e.nome_fantasia || e.nome}</option>)}
             </select>
+            {empSelecionada && (
+              <button onClick={() => setEmpSelecionada(null)}
+                className="text-xs text-gray-400 hover:text-white underline">Limpar</button>
+            )}
           </div>
-          {empSelecionada && (
-            <button onClick={() => setEmpSelecionada(null)}
-              className="text-xs text-stone-400 hover:text-stone-700 underline">Limpar</button>
-          )}
-        </div>
 
-        {/* KPIs */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {[
-            ['Empresas', kpi.empresas,  empSelecionada ? 'selecionada' : 'cadastradas'],
-            ['Lojas',    kpi.lojas,     'ativas'],
-            ['Usuários', kpi.usuarios,  'total'],
-            ['Ativos',   kpi.ativos,    'no sistema'],
-          ].map(([l, v, s]) => (
-            <div key={l} className="card p-4 text-center">
-              <p className="text-xs text-stone-400">{l}</p>
-              <p className="text-2xl font-extrabold text-stone-900 mt-0.5">{v}</p>
-              <p className="text-xs text-stone-400">{s}</p>
+          {/* Distribuição de perfis */}
+          <div className="bg-white/5 border border-white/10 rounded-xl p-4 mb-4">
+            <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">Usuários por Perfil</p>
+            <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+              {PERFIS_SISTEMA.map(key => (
+                <div key={key} className="bg-white/5 rounded-lg p-2 flex flex-col items-center gap-1">
+                  <span className={`badge text-xs ${PERFIL_BADGE[key]}`}>{PERFIL_LABEL[key]}</span>
+                  <span className="text-xl font-extrabold text-white">{perfisCounts[key] || 0}</span>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
+          </div>
 
-        {/* Distribuição de perfis */}
-        <div className="card p-4">
-          <p className="section-title">Usuários por Perfil</p>
-          <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
-            {PERFIS_SISTEMA.map(key => (
-              <div key={key} className="bg-stone-50 rounded-lg p-2 flex flex-col items-center gap-1">
-                <span className={`badge text-xs ${PERFIL_BADGE[key]}`}>{PERFIL_LABEL[key]}</span>
-                <span className="text-xl font-extrabold text-stone-800">{perfisCounts[key] || 0}</span>
-              </div>
+          {/* Abas */}
+          <div className="flex gap-2 flex-wrap">
+            {[['empresas', 'Empresas'], ['usuarios', 'Usuários'], ['identidade', '🎨 Identidade Visual'], ['logs', '📋 Logs']].map(([v, l]) => (
+              <button key={v} onClick={() => setAba(v)}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${aba === v ? 'bg-white text-black' : 'bg-white/10 text-gray-300 hover:bg-white/20'}`}>
+                {l}
+              </button>
             ))}
           </div>
         </div>
 
-        {/* Abas */}
-        <div className="flex gap-1 bg-stone-200 rounded-xl p-1 w-fit">
-          {[['empresas', 'Empresas'], ['usuarios', 'Usuários'], ['identidade', '🎨 Identidade Visual'], ['logs', '📋 Logs']].map(([v, l]) => (
-            <button key={v} onClick={() => setAba(v)}
-              className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${aba === v ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500 hover:text-stone-700'}`}>
-              {l}
-            </button>
-          ))}
-        </div>
-
         {/* ── ABA EMPRESAS ── */}
         {aba === 'empresas' && (
-          <div className="card p-4">
+          <div className="bg-white/5 border border-white/10 rounded-xl p-4">
             <div className="flex items-center justify-between mb-3 gap-3 flex-wrap">
-              <p className="section-title mb-0">Empresas Clientes <span className="text-stone-400 font-normal text-xs">({empresasFiltradas.length})</span></p>
+              <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-0">Empresas Clientes <span className="text-gray-500 font-normal">({empresasFiltradas.length})</span></p>
               <div className="flex items-center gap-2">
                 <input value={buscaEmpresa} onChange={e => setBuscaEmpresa(e.target.value)}
                   placeholder="Buscar nome ou fantasia..."
-                  className="text-xs border border-stone-200 rounded-lg px-2 py-1.5 bg-white text-stone-700 w-48" />
+                  className="text-xs border border-white/20 rounded-lg px-2 py-1.5 bg-white/10 text-white placeholder-gray-500 w-48" />
                 <button onClick={() => { setModalEmp(true); setMsgNE(null); setUserCriado(false) }} className="btn-success text-xs">+ Nova Empresa</button>
               </div>
             </div>
 
             {empresasFiltradas.length === 0 ? (
-              <p className="text-sm text-stone-400 text-center py-4">{buscaEmpresa ? 'Nenhuma empresa encontrada.' : 'Nenhuma empresa cadastrada.'}</p>
+              <p className="text-sm text-gray-400 text-center py-4">{buscaEmpresa ? 'Nenhuma empresa encontrada.' : 'Nenhuma empresa cadastrada.'}</p>
             ) : (
               <div className="space-y-2">
                 {empresasFiltradas.map(e => {
                   const nLojas    = lojas.filter(l => l.empresa_id === e.id).length
                   const nUsuarios = usuarios.filter(u => u.empresa_id === e.id).length
                   return (
-                    <div key={e.id} className="flex items-center justify-between py-2 border-b border-stone-100 last:border-0 gap-3">
+                    <div key={e.id} className="flex items-center justify-between py-2 border-b border-white/10 last:border-0 gap-3">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
-                          <p className="text-sm font-semibold text-stone-900 truncate">{e.nome_fantasia || e.nome}</p>
-                          {e.nome_fantasia && <span className="text-xs text-stone-400 truncate hidden sm:block">{e.nome}</span>}
+                          <p className="text-sm font-semibold text-white truncate">{e.nome_fantasia || e.nome}</p>
+                          {e.nome_fantasia && <span className="text-xs text-gray-400 truncate hidden sm:block">{e.nome}</span>}
                         </div>
-                        <p className="text-xs text-stone-400">
+                        <p className="text-xs text-gray-400">
                           {nLojas} loja{nLojas !== 1 ? 's' : ''} · {nUsuarios} usuário{nUsuarios !== 1 ? 's' : ''}
                           {e.cidade && <span> · {e.cidade}{e.estado ? `/${e.estado}` : ''}</span>}
                         </p>
@@ -408,7 +421,7 @@ async function criarUsuario() {
                           setMsgEE(null)
                         }} className="btn-secondary text-xs px-2 py-1">✏️</button>
                         <button onClick={() => toggleEmpresaAtivo(e)}
-                          className="text-xs text-stone-400 hover:text-stone-700 underline">
+                          className="text-xs text-gray-400 hover:text-white underline">
                           {e.ativo ? 'Desativar' : 'Ativar'}
                         </button>
                       </div>
@@ -422,25 +435,25 @@ async function criarUsuario() {
 
         {/* ── ABA USUÁRIOS ── */}
         {aba === 'usuarios' && (
-          <div className="card p-4">
+          <div className="bg-white/5 border border-white/10 rounded-xl p-4">
             <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
               <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-                <p className="section-title mb-0">Todos os Usuários <span className="text-stone-400 font-normal text-xs">({usuariosFiltrados.length})</span></p>
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-0">Todos os Usuários <span className="text-gray-500 font-normal">({usuariosFiltrados.length})</span></p>
                 <button onClick={() => { setModalUser(true); setMsgNU(null); setUserCriado(false); setNovoUser({ nome: '', email: '', senha: '', perfil: 'admin_cliente', empresa_id: '' }) }}
                   className="btn-success text-xs">+ Novo Usuário</button>
               </div>
               <div className="flex items-center gap-2 flex-wrap mb-3">
                 <input value={filtroBusca} onChange={e => setFiltroBusca(e.target.value)}
                   placeholder="Buscar nome ou e-mail..."
-                  className="text-xs border border-stone-200 rounded-lg px-2 py-1.5 bg-white text-stone-700 flex-1 min-w-[160px]" />
+                  className="text-xs border border-white/20 rounded-lg px-2 py-1.5 bg-white/10 text-white placeholder-gray-500 flex-1 min-w-[160px]" />
                 <select value={filtroPerfil} onChange={e => setFiltroPerfil(e.target.value)}
-                  className="text-xs border border-stone-200 rounded-lg px-2 py-1.5 bg-white text-stone-700">
+                  className="text-xs border border-white/20 rounded-lg px-2 py-1.5 bg-white/10 text-white">
                   <option value="">Todos os perfis</option>
                   {PERFIS_SISTEMA.map(p => <option key={p} value={p}>{PERFIL_LABEL[p]}</option>)}
                 </select>
                 {(filtroBusca || filtroPerfil) && (
                   <button onClick={() => { setFiltroBusca(''); setFiltroPerfil('') }}
-                    className="text-xs text-stone-400 hover:text-stone-700 underline">Limpar</button>
+                    className="text-xs text-gray-400 hover:text-white underline">Limpar</button>
                 )}
               </div>
             </div>
@@ -448,7 +461,7 @@ async function criarUsuario() {
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="text-left text-xs text-stone-400 border-b border-stone-100">
+                  <tr className="text-left text-xs text-gray-400 border-b border-white/10">
                     <th className="pb-2 font-medium">Nome</th>
                     <th className="pb-2 font-medium">E-mail</th>
                     <th className="pb-2 font-medium">Perfil</th>
@@ -467,20 +480,20 @@ async function criarUsuario() {
                             <div className="flex items-center gap-2">
                               <input value={editUserNome} onChange={ev => setEditUserNome(ev.target.value)}
                                 onKeyDown={ev => { if (ev.key === 'Enter') salvarNomeUsuario(u.id); if (ev.key === 'Escape') setEditUserId(null) }}
-                                className="text-sm border border-stone-300 rounded px-2 py-0.5 w-36" autoFocus />
+                                className="text-sm border border-white/20 rounded px-2 py-0.5 w-36 bg-white/10 text-white" autoFocus />
                               <button onClick={() => salvarNomeUsuario(u.id)} disabled={savingUN}
-                                className="text-xs text-green-700 font-medium hover:underline">✓</button>
-                              <button onClick={() => setEditUserId(null)} className="text-xs text-stone-400 hover:underline">✕</button>
+                                className="text-xs text-green-400 font-medium hover:underline">✓</button>
+                              <button onClick={() => setEditUserId(null)} className="text-xs text-gray-400 hover:underline">✕</button>
                             </div>
                           ) : (
                             <div className="flex items-center gap-1">
-                              <span className="font-medium text-stone-800">{u.nome}</span>
+                              <span className="font-medium text-white">{u.nome}</span>
                               <button onClick={() => { setEditUserId(u.id); setEditUserNome(u.nome) }}
-                                className="text-stone-400 hover:text-stone-600 text-xs ml-1">✏️</button>
+                                className="text-gray-400 hover:text-white text-xs ml-1">✏️</button>
                             </div>
                           )}
                         </td>
-                        <td className="py-2 text-stone-500 text-xs">{u.email}</td>
+                        <td className="py-2 text-gray-400 text-xs">{u.email}</td>
                         <td className="py-2">
                           <select value={u.perfil}
                             onChange={ev => salvarPerfilUsuario(u.id, ev.target.value)}
@@ -488,7 +501,7 @@ async function criarUsuario() {
                             {PERFIS_SISTEMA.map(p => <option key={p} value={p}>{PERFIL_LABEL[p]}</option>)}
                           </select>
                         </td>
-                        <td className="py-2 text-stone-500 text-xs">{empresa?.nome || '—'}</td>
+                        <td className="py-2 text-gray-400 text-xs">{empresa?.nome || '—'}</td>
                         <td className="py-2">
                           <button onClick={() => toggleUsuarioAtivo(u)}
                             className={`badge text-xs cursor-pointer ${u.ativo ? 'badge-green' : 'badge-gray'}`}>
@@ -506,12 +519,12 @@ async function criarUsuario() {
 
         {/* ── ABA LOGS ── */}
         {aba === 'logs' && (
-          <div className="card p-4">
+          <div className="bg-white/5 border border-white/10 rounded-xl p-4">
             <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
-              <p className="section-title mb-0">📋 Audit Log</p>
+              <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-0">📋 Audit Log</p>
               <div className="flex items-center gap-2 flex-wrap">
                 <select value={logTabela} onChange={e => setLogTabela(e.target.value)}
-                  className="text-xs border border-stone-200 rounded-lg px-2 py-1.5 bg-white text-stone-700">
+                  className="text-xs border border-white/20 rounded-lg px-2 py-1.5 bg-white/10 text-white">
                   <option value="">Todas as tabelas</option>
                   <option value="empresas">Empresas</option>
                   <option value="lancamentos">Lançamentos</option>
@@ -519,7 +532,7 @@ async function criarUsuario() {
                   <option value="metas_loja">Metas Loja</option>
                 </select>
                 <select value={logEmpId} onChange={e => setLogEmpId(e.target.value)}
-                  className="text-xs border border-stone-200 rounded-lg px-2 py-1.5 bg-white text-stone-700">
+                  className="text-xs border border-white/20 rounded-lg px-2 py-1.5 bg-white/10 text-white">
                   <option value="">Todas as empresas</option>
                   {empresas.map(e => <option key={e.id} value={e.id}>{e.nome_fantasia || e.nome}</option>)}
                 </select>
@@ -530,16 +543,16 @@ async function criarUsuario() {
             </div>
 
             {loadingLogs ? (
-              <p className="text-sm text-stone-400 text-center py-6">Carregando...</p>
+              <p className="text-sm text-gray-400 text-center py-6">Carregando...</p>
             ) : logs.length === 0 ? (
-              <p className="text-sm text-stone-400 text-center py-6">
+              <p className="text-sm text-gray-400 text-center py-6">
                 Nenhum registro encontrado. Clique em Filtrar para carregar os logs.
               </p>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-xs">
                   <thead>
-                    <tr className="text-left text-stone-400 border-b border-stone-100">
+                    <tr className="text-left text-gray-400 border-b border-white/10">
                       <th className="pb-2 font-medium pr-3">Data/Hora</th>
                       <th className="pb-2 font-medium pr-3">Tabela</th>
                       <th className="pb-2 font-medium pr-3">Operação</th>
@@ -550,35 +563,35 @@ async function criarUsuario() {
                   <tbody>
                     {logs.map(log => {
                       const op = log.operacao
-                      const opColor = op === 'INSERT' ? 'badge-green' : op === 'DELETE' ? 'bg-red-100 text-red-700' : 'badge-amber'
+                      const opColor = op === 'INSERT' ? 'badge-green' : op === 'DELETE' ? 'bg-red-500/20 text-red-400 border-red-400/30' : 'badge-amber'
                       const usuario = usuarios.find(u => u.id === log.usuario_id)
                       return (
-                        <tr key={log.id} className="border-b border-stone-50 last:border-0 align-top">
-                          <td className="py-2 pr-3 text-stone-500 whitespace-nowrap">
+                        <tr key={log.id} className="border-b border-white/5 last:border-0 align-top">
+                          <td className="py-2 pr-3 text-gray-400 whitespace-nowrap">
                             {new Date(log.criado_em).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}
                           </td>
-                          <td className="py-2 pr-3 font-mono text-stone-600">{log.tabela}</td>
+                          <td className="py-2 pr-3 font-mono text-gray-300">{log.tabela}</td>
                           <td className="py-2 pr-3">
                             <span className={`badge text-xs ${opColor}`}>{op}</span>
                           </td>
-                          <td className="py-2 pr-3 text-stone-500">{usuario?.nome || log.usuario_id?.slice(0, 8) || '—'}</td>
-                          <td className="py-2 text-stone-500 max-w-xs">
+                          <td className="py-2 pr-3 text-gray-400">{usuario?.nome || log.usuario_id?.slice(0, 8) || '—'}</td>
+                          <td className="py-2 text-gray-400 max-w-xs">
                             {op === 'UPDATE' && log.antes && log.depois ? (
                               <details className="cursor-pointer">
-                                <summary className="text-xs text-blue-600 hover:underline">Ver diff</summary>
+                                <summary className="text-xs text-blue-400 hover:underline">Ver diff</summary>
                                 <div className="mt-1 space-y-1">
                                   {Object.keys(log.depois).filter(k => JSON.stringify(log.antes[k]) !== JSON.stringify(log.depois[k])).map(k => (
                                     <div key={k} className="text-xs">
-                                      <span className="font-medium text-stone-700">{k}:</span>{' '}
-                                      <span className="line-through text-red-500">{String(log.antes[k] ?? '—')}</span>
+                                      <span className="font-medium text-gray-300">{k}:</span>{' '}
+                                      <span className="line-through text-red-400">{String(log.antes[k] ?? '—')}</span>
                                       {' → '}
-                                      <span className="text-green-600">{String(log.depois[k] ?? '—')}</span>
+                                      <span className="text-green-400">{String(log.depois[k] ?? '—')}</span>
                                     </div>
                                   ))}
                                 </div>
                               </details>
                             ) : op === 'INSERT' ? (
-                              <span className="text-stone-400 italic">novo registro</span>
+                              <span className="text-gray-400 italic">novo registro</span>
                             ) : op === 'DELETE' ? (
                               <span className="text-red-400 italic">registro removido</span>
                             ) : null}
@@ -595,8 +608,8 @@ async function criarUsuario() {
 
         {/* ── ABA IDENTIDADE VISUAL ── */}
         {aba === 'identidade' && (
-          <div className="card p-5 max-w-lg">
-            <p className="section-title">🎨 Identidade Visual por Empresa</p>
+          <div className="bg-white/5 border border-white/10 rounded-xl p-5 max-w-lg">
+            <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">🎨 Identidade Visual por Empresa</p>
 
             <div className="mb-4">
               <label className="label-field">Empresa</label>

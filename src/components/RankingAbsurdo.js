@@ -4,6 +4,15 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useEffect, useState } from 'react'
 import { fmtPct, fmtR } from '@/lib/helpers'
 
+const CORES_F1 = [
+  { text: '#facc15', bar: 'from-yellow-400 to-orange-500' },
+  { text: '#94a3b8', bar: 'from-slate-400 to-slate-300' },
+  { text: '#f59e0b', bar: 'from-amber-700 to-amber-500' },
+  { text: '#818cf8', bar: 'from-indigo-500 to-purple-500' },
+  { text: '#34d399', bar: 'from-green-500 to-emerald-400' },
+]
+function corF1(index) { return CORES_F1[index] || CORES_F1[4] }
+
 export default function RankingAbsurdo({ ranking = [], lojaData = {} }) {
   const [prev, setPrev] = useState([])
   const [mov, setMov] = useState({})
@@ -44,6 +53,7 @@ export default function RankingAbsurdo({ ranking = [], lojaData = {} }) {
         {top3.map((l, i) => {
           const score = l.percentual || 0
           const isTop = i === 0
+          const cor   = corF1(i)
 
           return (
             <motion.div
@@ -56,8 +66,8 @@ export default function RankingAbsurdo({ ranking = [], lojaData = {} }) {
                 i === 0
                   ? 'bg-yellow-500/10 border-yellow-400 shadow-[0_0_40px_rgba(255,215,0,0.4)]'
                   : i === 1
-                  ? 'bg-gray-400/10 border-gray-300/50'
-                  : 'bg-orange-500/10 border-orange-400/60'
+                  ? 'bg-slate-500/10 border-slate-400/50'
+                  : 'bg-amber-500/10 border-amber-600/60'
               }`}
             >
               {/* PULSE LÍDER */}
@@ -86,7 +96,8 @@ export default function RankingAbsurdo({ ranking = [], lojaData = {} }) {
                 key={score}
                 initial={{ scale: 1.3 }}
                 animate={{ scale: 1 }}
-                className={`text-2xl font-extrabold mt-2 ${isTop ? 'text-yellow-400' : 'text-green-400'}`}
+                className="text-2xl font-extrabold mt-2"
+                style={{ color: cor.text }}
               >
                 {fmtPct(score)}
               </motion.p>
@@ -105,8 +116,9 @@ export default function RankingAbsurdo({ ranking = [], lojaData = {} }) {
         <div className="space-y-3">
           <AnimatePresence>
             {resto.map((l, i) => {
-              const score    = l.percentual || 0
+              const score     = l.percentual || 0
               const movimento = mov[l.id]
+              const cor       = corF1(i + 3)
 
               return (
                 <motion.div
@@ -153,10 +165,10 @@ export default function RankingAbsurdo({ ranking = [], lojaData = {} }) {
                         initial={{ width: 0 }}
                         animate={{ width: `${Math.min(score, 100)}%` }}
                         transition={{ duration: 0.8 }}
-                        className="h-full bg-gradient-to-r from-purple-500 to-blue-500"
+                        className={`h-full bg-gradient-to-r ${cor.bar}`}
                       />
                     </div>
-                    <span className="font-bold text-green-400 min-w-[48px] text-right">
+                    <span className="font-bold min-w-[48px] text-right" style={{ color: cor.text }}>
                       {fmtPct(score)}
                     </span>
                   </div>

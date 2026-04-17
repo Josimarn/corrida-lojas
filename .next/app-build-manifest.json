@@ -1,9 +1,9 @@
 {
   "pages": {
-    "/page": [
+    "/gerente/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/page.js"
+      "static/chunks/app/gerente/page.js"
     ],
     "/layout": [
       "static/chunks/webpack.js",
@@ -11,50 +11,10 @@
       "static/css/app/layout.css",
       "static/chunks/app/layout.js"
     ],
-    "/dashboard/page": [
+    "/_not-found/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/dashboard/page.js"
-    ],
-    "/dono/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/dono/page.js"
-    ],
-    "/vendedor/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/vendedor/page.js"
-    ],
-    "/admin/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/admin/page.js"
-    ],
-    "/supervisor/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/supervisor/page.js"
-    ],
-    "/gerente/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/gerente/page.js"
-    ],
-    "/super-admin/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/super-admin/page.js"
-    ],
-    "/dono/tv/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/dono/tv/page.js"
-    ],
-    "/gerente/tv/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/gerente/tv/page.js"
+      "static/chunks/app/_not-found/page.js"
     ]
   }
 }
