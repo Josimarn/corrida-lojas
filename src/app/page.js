@@ -4,6 +4,7 @@ import { motion } from 'framer-motion'
 import { useEffect, useState } from 'react'
 import { createClientComponent } from '../lib/supabase-browser'
 import { useRouter } from 'next/navigation'
+import CorridaItem from '../components/CorridaItem'
 
 export default function LoginPage() {
   const [email,    setEmail]    = useState('')
@@ -75,121 +76,17 @@ export default function LoginPage() {
         </div>
 
         {/* RANKING */}
-        <div className="relative z-10 space-y-3">
+        <div className="relative z-10 space-y-1">
 
-          {ranking.map((item, index) => {
-            const bateuMeta = item.percentual >= 100
-
-            return (
-              <div key={index} className="relative">
-
-                <p className="mb-1 text-sm text-gray-300 flex items-center gap-2">
-                  {bateuMeta && <span className="animate-bounce">🏆</span>}
-                  {item.nome}
-                </p>
-
-                <div className="w-full h-6 bg-white/10 rounded-full overflow-hidden relative backdrop-blur">
-
-                  {/* EXPLOSÃO META */}
-                  {bateuMeta && (
-                    <motion.div
-                      initial={{ scale: 0 }}
-                      animate={{ scale: [1, 1.4, 1] }}
-                      transition={{ duration: 0.5 }}
-                      className="absolute inset-0 rounded-full bg-yellow-400/20 blur-xl"
-                    />
-                  )}
-
-                  {/* BARRA */}
-                  <motion.div
-                    initial={{ width: 0 }}
-                    animate={{ width: `${item.percentual}%` }}
-                    transition={{ duration: 1.5 }}
-                    className={`h-full bg-gradient-to-r ${item.cor}
-                      ${bateuMeta ? 'shadow-[0_0_25px_rgba(255,215,0,0.8)] animate-pulse' : ''}
-                    `}
-                  />
-
-                  {/* 🚗 CARRINHO COM FÍSICA REAL */}
-                  <motion.div
-                    initial={{ left: '0%' }}
-                    animate={{
-                      left: `${Math.min(item.percentual, 98)}%`,
-                    }}
-                    transition={{
-                      type: 'spring',
-                      stiffness: 80,
-                      damping: 12,
-                      mass: 0.8,
-                    }}
-                    className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 flex items-center"
-                  >
-
-                    {/* FUMAÇA */}
-                    <motion.div
-                      animate={{
-                        opacity: [0.4, 0],
-                        scale: [0.8, 1.6],
-                        x: [-10, -25],
-                      }}
-                      transition={{
-                        duration: 0.5,
-                        repeat: Infinity,
-                      }}
-                      className="absolute left-[-10px] w-3 h-3 bg-white/40 rounded-full blur-sm"
-                    />
-
-                    {/* CARRO */}
-                    <motion.span
-                      animate={{
-                        scaleX: [-1, -1],
-                        rotate: [0, 8, -6, 4, 0],
-                        y: [0, -1, 1, -1, 0],
-                      }}
-                      transition={{
-                        duration: 0.6,
-                        repeat: Infinity,
-                      }}
-                      style={{ display: 'inline-block', scaleX: -1 }}
-                      className={`text-lg drop-shadow-md ${bateuMeta ? 'text-xl' : ''}`}
-                    >
-                      🚗
-                    </motion.span>
-
-                  </motion.div>
-
-                  {/* IMPACTO FINAL */}
-                  {bateuMeta && (
-                    <motion.div
-                      initial={{ scale: 0 }}
-                      animate={{ scale: [1, 1.5, 1] }}
-                      transition={{ duration: 0.4 }}
-                      className="absolute right-0 top-1/2 -translate-y-1/2 w-6 h-6 bg-yellow-400/30 rounded-full blur-lg"
-                    />
-                  )}
-
-                  {/* BANDEIRA */}
-                  {bateuMeta && (
-                    <div className="absolute right-2 top-1 text-sm">
-                      🏁
-                    </div>
-                  )}
-
-                </div>
-
-                <p className="text-xs text-right mt-1 text-green-400 font-semibold">
-                  {item.percentual}%
-                </p>
-
-                {bateuMeta && (
-                  <div className="text-xs text-yellow-400 mt-1 mb-1">
-                    🎉 {item.nome} bateu a meta!
-                  </div>
-                )}
-
-              </div>
-            )
-          })}
+          {ranking.map((item, index) => (
+            <CorridaItem
+              key={index}
+              nome={item.nome}
+              percentual={item.percentual}
+              index={index}
+              cor={item.cor}
+            />
+          ))}
 
           {/* EVENTOS */}
           <div className="mt-4 space-y-2">

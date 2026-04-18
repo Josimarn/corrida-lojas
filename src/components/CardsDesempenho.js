@@ -129,7 +129,7 @@ export default function CardsDesempenho({ ranking = [], lojaData = {} }) {
                   </div>
                   <div>
                     <p className="text-gray-400">Meta</p>
-                    <p className="font-bold text-white">{fmtR(d.metaLoja?.meta_total || 0)}</p>
+                    <p className="font-bold text-white">{fmtR((d.metaLoja?.meta_loja ?? 0) > 0 ? d.metaLoja.meta_loja : (d.metaLoja?.meta_total || 0))}</p>
                   </div>
                   <div>
                     <p className="text-gray-400">Atend.</p>

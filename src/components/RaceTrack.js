@@ -12,6 +12,15 @@ const CORES_F1 = [
 ]
 function corF1(index) { return CORES_F1[index] || CORES_F1[4] }
 
+const CAR_FILTERS = [
+  'hue-rotate(40deg) saturate(2) brightness(1.1)',    // 🥇 gold
+  'grayscale(1) brightness(1.8)',                      // 🥈 silver
+  'hue-rotate(20deg) saturate(2)',                     // 🥉 amber
+  'hue-rotate(200deg) saturate(1.5) brightness(1.3)', // indigo
+  'hue-rotate(120deg) saturate(1.5)',                  // green
+]
+function carFilter(index) { return CAR_FILTERS[index] ?? CAR_FILTERS[4] }
+
 // Aceita duas APIs:
 // Nova: <RaceTrack ranking={[{ id, nome, codigo, percentual }]} />
 // Antiga: <RaceTrack vendedores={[...]} scores={{ [id]: { score, scoreDisplay } }} semanas={4} />
@@ -146,10 +155,10 @@ export default function RaceTrack({ ranking: rankingProp, vendedores, scores, se
                     scale: index === 0 ? [1, 1.15, 1] : 1,
                   }}
                   transition={{ duration: 0.6, repeat: Infinity }}
-                  style={{ display: 'inline-block', scaleX: -1 }}
+                  style={{ display: 'inline-block', scaleX: -1, filter: carFilter(index) }}
                   className="text-3xl"
                 >
-                  🚗
+                  🏎️
                 </motion.span>
               </motion.div>
 

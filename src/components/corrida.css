@@ -1,0 +1,109 @@
+/* ═══════════════════════════════════════
+   CORRIDA — estilos
+   ═══════════════════════════════════════ */
+
+.corrida-item {
+  margin-bottom: 16px;
+}
+
+.corrida-nome {
+  margin-bottom: 4px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #d1d5db;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.corrida-percentual {
+  font-size: 0.75rem;
+  text-align: right;
+  margin-top: 3px;
+  color: #4ade80;
+  font-weight: 600;
+}
+
+/* ── PISTA — overflow visível para não clipar o carro ── */
+.pista {
+  position: relative;
+  height: 24px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  overflow: visible;
+}
+
+/* ── BARRA — clip isolado para a cor não vazar ── */
+.pista-fill {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+/* ── BARRA ── */
+.barra {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 1.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+.barra.meta-atingida {
+  animation: pulseMeta 1.5s ease-in-out infinite;
+}
+
+@keyframes pulseMeta {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.75; }
+}
+
+/* ── CARRINHO — dentro da pista, na ponta da barra ── */
+.carrinho {
+  position: absolute;
+  top: 50%;
+  transform: translateX(-50%) translateY(-50%);
+  transition: left 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
+  z-index: 10;
+  line-height: 1;
+}
+
+/* ── EMOJI DO CARRO ── */
+.carro-emoji {
+  display: block;
+  font-size: 1.8rem;
+  line-height: 1;
+  transform: scaleX(-1);
+  user-select: none;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
+}
+
+/* ── TURBO ── */
+.carrinho.turbo .carro-emoji {
+  filter: drop-shadow(0 0 6px gold) drop-shadow(0 0 12px orange);
+  animation: turboGlow 0.8s ease-in-out infinite alternate;
+}
+
+@keyframes turboGlow {
+  0%   { filter: drop-shadow(0 0 4px gold)  drop-shadow(0 0 8px orange);  }
+  100% { filter: drop-shadow(0 0 10px gold) drop-shadow(0 0 20px orange); }
+}
+
+/* ── BANDEIRA META ── */
+.bandeira-meta {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 0.75rem;
+  pointer-events: none;
+}
+
+/* ── GLOW META ── */
+.glow-meta {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: rgba(255, 215, 0, 0.2);
+  filter: blur(8px);
+  pointer-events: none;
+}

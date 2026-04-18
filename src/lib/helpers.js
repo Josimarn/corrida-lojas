@@ -5,7 +5,7 @@ export function fmtR(v) {
 export function fmtN(v, d = 2) {
   return (v || 0).toLocaleString('pt-BR', { minimumFractionDigits: d, maximumFractionDigits: d })
 }
-export function fmtPct(v) { return fmtN(Math.min(v || 0, 999), 1) + '%' }
+export function fmtPct(v) { return fmtN(Math.min(v || 0, 999), 2) + '%' }
 
 // ─── Semanas do mês ──────────────────────────────────────────
 const DIAS = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']

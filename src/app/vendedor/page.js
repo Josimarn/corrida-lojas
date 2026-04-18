@@ -272,7 +272,7 @@ export default function VendedorPage() {
               <p className="text-3xl font-extrabold leading-tight">{fmtPct(scored.score)}</p>
               <p className="text-sm mt-0.5">{mensagem}</p>
             </div>
-            <div className="text-4xl select-none">🏎️</div>
+            <div className="text-6xl select-none" style={{ display: 'inline-block', transform: 'scaleX(-1)' }}>🏎️</div>
           </div>
           <div className="mt-4 h-3 bg-black/20 rounded-full overflow-hidden">
             <motion.div
@@ -328,17 +328,17 @@ export default function VendedorPage() {
               <motion.div
                 animate={{ left: `${Math.min(rival.score, 97)}%` }}
                 transition={{ type: 'spring', stiffness: 80, damping: 14 }}
-                className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 text-xl select-none"
+                className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 text-3xl select-none"
               >
-                🚗
+                <span style={{ display: 'inline-block', transform: 'scaleX(-1)', filter: 'grayscale(1) brightness(1.8)' }}>🏎️</span>
               </motion.div>
               {/* você */}
               <motion.div
                 animate={{ left: `${Math.min(scored.score, 97)}%` }}
                 transition={{ type: 'spring', stiffness: 100, damping: 14 }}
-                className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 text-xl select-none"
+                className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 text-3xl select-none"
               >
-                🏎️
+                <span style={{ display: 'inline-block', transform: 'scaleX(-1)' }}>🏎️</span>
               </motion.div>
             </div>
             <div className="flex justify-between text-xs text-gray-500 mt-2">
@@ -386,7 +386,6 @@ export default function VendedorPage() {
                 <div className="h-full rounded-full transition-all duration-700"
                   style={{ width: `${Math.min(pct, 100)}%`, background: color }} />
               </div>
-              <p className="text-xs text-gray-500">{sub}</p>
             </motion.div>
           ))}
         </div>

@@ -1,4 +1,8 @@
 'use client'
+function getMeta(metaLoja) {
+  if (!metaLoja) return 0
+  return (metaLoja.meta_loja ?? 0) > 0 ? metaLoja.meta_loja : (metaLoja.meta_total ?? 0)
+}
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase-browser'
@@ -27,8 +31,8 @@ function SalaDeGuerra({ lojas, lojaData, supabase }) {
 
   const ranking = [...lojas].map(loja => {
     const d = lojaData[loja.id] || { totalVendas: 0, metaLoja: null }
-    const percentual = d.metaLoja?.meta_total > 0
-      ? Math.round(d.totalVendas / d.metaLoja.meta_total * 1000) / 10
+    const percentual = getMeta(d.metaLoja) > 0
+      ? Math.round(d.totalVendas / getMeta(d.metaLoja) * 1000) / 10
       : 0
     return { id: loja.id, nome: loja.nome, codigo: loja.codigo, percentual }
   }).sort((a, b) => b.percentual - a.percentual)
@@ -144,10 +148,10 @@ function SalaDeGuerra({ lojas, lojaData, supabase }) {
                 <motion.span
                   animate={{ scaleX: [-1, -1], rotate: [0, 8, -6, 4, 0], y: [0, -1, 1, -1, 0] }}
                   transition={{ duration: 0.6, repeat: Infinity }}
-                  style={{ display: 'inline-block', scaleX: -1 }}
-                  className="text-lg drop-shadow-md"
+                  style={{ display: 'inline-block', scaleX: -1, filter: ['hue-rotate(40deg) saturate(2) brightness(1.1)','grayscale(1) brightness(1.8)','hue-rotate(20deg) saturate(2)','hue-rotate(200deg) saturate(1.5) brightness(1.3)','hue-rotate(120deg) saturate(1.5)'][index] ?? 'hue-rotate(120deg) saturate(1.5)' }}
+                  className="text-2xl drop-shadow-md"
                 >
-                  🚗
+                  🏎️
                 </motion.span>
               </motion.div>
 
@@ -172,7 +176,7 @@ function LojaCard({ loja, dados, index }) {
   const lcs    = dados.lancamentos || []
   const meta   = dados.metaLoja
   const st     = aggregateLancamentos(lcs)
-  const score  = meta?.meta_total > 0 ? Math.round(st.vendas / meta.meta_total * 1000) / 10 : 0
+  const score  = getMeta(meta) > 0 ? Math.round(st.vendas / getMeta(meta) * 1000) / 10 : 0
   const atingiu = score >= 100
 
   return (
@@ -333,9 +337,9 @@ export default function DonoPage() {
         const porLoja = {}
         for (const loja of ls) {
           const { data: lcs } = await supabase.from('lancamentos').select('vendas').eq('loja_id', loja.id).in('data', keys)
-          const { data: ml }  = await supabase.from('metas_loja').select('meta_total').eq('loja_id', loja.id).eq('ano', ano).eq('mes', mes).maybeSingle()
+          const { data: ml }  = await supabase.from('metas_loja').select('meta_total,meta_loja').eq('loja_id', loja.id).eq('ano', ano).eq('mes', mes).maybeSingle()
           const v = (lcs || []).reduce((s, l) => s + (l.vendas || 0), 0)
-          const m = ml?.meta_total || 0
+          const m = (ml?.meta_loja ?? 0) > 0 ? ml.meta_loja : (ml?.meta_total || 0)
           totalVendas += v; totalMeta += m
           porLoja[loja.id] = { vendas: v, meta: m }
         }
@@ -354,7 +358,7 @@ export default function DonoPage() {
   const kpi = lojas.reduce((acc, l) => {
     const d = lojaData[l.id] || { totalVendas: 0, vendedores: [], metaLoja: null }
     acc.vendas     += d.totalVendas || 0
-    acc.meta       += d.metaLoja?.meta_total || 0
+    acc.meta       += getMeta(d.metaLoja)
     acc.vendedores += d.vendedores.length
     return acc
   }, { vendas: 0, meta: 0, vendedores: 0 })
@@ -371,14 +375,14 @@ export default function DonoPage() {
   const scoresLojas = {}
   lojas.forEach(l => {
     const d = lojaData[l.id] || { totalVendas: 0, metaLoja: null }
-    const rawScore = d.metaLoja?.meta_total > 0 ? Math.round(d.totalVendas / d.metaLoja.meta_total * 1000) / 10 : 0
+    const rawScore = getMeta(d.metaLoja) > 0 ? Math.round(d.totalVendas / getMeta(d.metaLoja) * 1000) / 10 : 0
     scoresLojas[l.id] = { scoreDisplay: rawScore, score: applyWeekPos(rawScore, weekNumberDono) }
   })
 
   // Ranking
   const rankLojas = [...lojas].map((l, i) => {
     const d = lojaData[l.id] || { totalVendas: 0, metaLoja: null }
-    const score = d.metaLoja?.meta_total > 0 ? Math.round(d.totalVendas / d.metaLoja.meta_total * 1000) / 10 : 0
+    const score = getMeta(d.metaLoja) > 0 ? Math.round(d.totalVendas / getMeta(d.metaLoja) * 1000) / 10 : 0
     return { l, i, score, vendas: d.totalVendas }
   }).sort((a, b) => b.score - a.score)
 
@@ -446,7 +450,7 @@ export default function DonoPage() {
           const rankCoords = [...regionais].map((reg, idx) => {
             const lojasReg    = lojas.filter(l => reg.lojaIds.includes(l.id))
             const totalVendas = lojasReg.reduce((s, l) => s + (lojaData[l.id]?.totalVendas || 0), 0)
-            const totalMeta   = lojasReg.reduce((s, l) => s + (lojaData[l.id]?.metaLoja?.meta_total || 0), 0)
+            const totalMeta   = lojasReg.reduce((s, l) => s + getMeta(lojaData[l.id]?.metaLoja), 0)
             const pct         = totalMeta > 0 ? Math.round(totalVendas / totalMeta * 1000) / 10 : 0
             return { reg, lojasReg, totalVendas, totalMeta, pct, idx }
           }).sort((a, b) => b.pct - a.pct)
@@ -505,7 +509,7 @@ export default function DonoPage() {
             const d   = lojaData[l.id] || { lancamentos: [], metaLoja: null }
             const lcs = d.lancamentos.filter(lc => selDs.includes(lc.data))
             const st  = aggregateLancamentos(lcs)
-            const metaTotal = d.metaLoja?.meta_total || 0
+            const metaTotal = getMeta(d.metaLoja)
             // Posição na pista = progresso real em relação à meta mensal
             const scorePista = metaTotal > 0 ? Math.round(st.vendas / metaTotal * 1000) / 10 : 0
             // % exibido = desempenho vs meta proporcional dos dias selecionados

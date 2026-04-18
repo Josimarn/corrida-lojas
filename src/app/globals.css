@@ -32,4 +32,113 @@
   .badge-gray   { @apply badge bg-stone-100 text-stone-700 border-stone-200; }
   .label-field { @apply block text-xs font-medium text-stone-500 mb-1; }
   .section-title { @apply text-xs font-bold text-stone-400 uppercase tracking-widest mb-3; }
+
+  /* ── Corrida ── */
+  .pista {
+    position: relative;
+    height: 56px;
+  }
+  .pista-barra {
+    position: absolute;
+    left: 0; right: 0;
+    height: 24px;
+    top: 50%;
+    transform: translateY(-50%);
+    border-radius: 9999px;
+    overflow: hidden;
+    backdrop-filter: blur(4px);
+    background: rgba(255,255,255,0.1);
+  }
+  .pista-fill {
+    height: 100%;
+    border-radius: 9999px;
+    transition: width 0.8s ease;
+  }
+  .carrinho {
+    position: absolute;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 10;
+    line-height: 1;
+  }
+  .carro-img {
+    display: inline-block;
+    font-size: 2.8rem;
+    line-height: 1;
+    transform: scaleX(-1);
+    filter: drop-shadow(0 4px 6px rgba(0,0,0,0.5));
+    user-select: none;
+  }
+  .turbo .carro-img {
+    filter: drop-shadow(0 4px 6px rgba(0,0,0,0.5))
+            drop-shadow(0 0 10px gold)
+            drop-shadow(0 0 20px orange);
+  }
+  .turbo-chama {
+    position: absolute;
+    right: -14px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 1.1rem;
+    line-height: 1;
+    animation: chama 0.3s ease-in-out infinite alternate;
+  }
+  @keyframes chama {
+    0%   { transform: translateY(-50%) scale(1); }
+    100% { transform: translateY(-50%) scale(1.25); }
+  }
+  .fumaca {
+    position: absolute;
+    left: -8px;
+    top: 50%;
+    width: 8px; height: 8px;
+    background: rgba(200,200,200,0.6);
+    border-radius: 50%;
+    transform: translateY(-50%);
+    filter: blur(2px);
+    animation: fumacaAnim 0.5s ease-out infinite;
+  }
+  .fumaca-2 {
+    position: absolute;
+    left: -6px;
+    top: 50%;
+    width: 6px; height: 6px;
+    background: rgba(200,200,200,0.5);
+    border-radius: 50%;
+    transform: translateY(-50%);
+    filter: blur(2px);
+    animation: fumacaAnim 0.5s ease-out infinite 0.15s;
+  }
+  .fumaca-3 {
+    position: absolute;
+    left: -4px;
+    top: 50%;
+    width: 5px; height: 5px;
+    background: rgba(220,220,220,0.4);
+    border-radius: 50%;
+    transform: translateY(-50%);
+    filter: blur(2px);
+    animation: fumacaAnim 0.5s ease-out infinite 0.3s;
+  }
+  @keyframes fumacaAnim {
+    0%   { opacity: 0.8; transform: translateY(-50%) translateX(0)   scale(1); }
+    100% { opacity: 0;   transform: translateY(-50%) translateX(-20px) scale(2); }
+  }
+  .carro-sombra {
+    position: absolute;
+    bottom: -4px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 70%; height: 6px;
+    background: rgba(0,0,0,0.4);
+    border-radius: 50%;
+    filter: blur(4px);
+  }
+  .flutuar {
+    animation: flutuar 1.5s ease-in-out infinite;
+  }
+  @keyframes flutuar {
+    0%,100% { transform: scaleX(-1) translateY(0px); }
+    50%     { transform: scaleX(-1) translateY(-2px); }
+  }
 }

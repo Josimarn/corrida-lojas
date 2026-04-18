@@ -1,4 +1,9 @@
 'use client'
+// Retorna meta_loja quando configurada (>0), senão meta_total
+function getMeta(metaLoja) {
+  if (!metaLoja) return 0
+  return (metaLoja.meta_loja ?? 0) > 0 ? metaLoja.meta_loja : (metaLoja.meta_total ?? 0)
+}
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase-browser'
@@ -26,7 +31,8 @@ function SalaDeGuerra({ lojas, lojaData, supabase }) {
   const ranking = [...lojas].map(loja => {
     const d = lojaData[loja.id] || { lancamentos: [], metaLoja: null }
     const totalVendas = d.lancamentos.reduce((s, l) => s + (l.vendas || 0), 0)
-    const percentual  = d.metaLoja?.meta_total > 0 ? Math.round(totalVendas / d.metaLoja.meta_total * 1000) / 10 : 0
+    const mRef        = getMeta(d.metaLoja)
+    const percentual  = mRef > 0 ? Math.round(totalVendas / mRef * 1000) / 10 : 0
     return { id: loja.id, nome: loja.nome, codigo: loja.codigo, percentual }
   }).sort((a, b) => b.percentual - a.percentual)
 
@@ -82,7 +88,7 @@ function SalaDeGuerra({ lojas, lojaData, supabase }) {
               <motion.div animate={{ left: `${Math.min(item.percentual, 98)}%` }} transition={{ type: 'spring', stiffness: 80, damping: 12, mass: 0.8 }}
                 className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2">
                 <motion.span animate={{ scaleX: [-1,-1], rotate: [0,8,-6,4,0], y: [0,-1,1,-1,0] }} transition={{ duration: 0.6, repeat: Infinity }}
-                  style={{ display: 'inline-block', scaleX: -1 }} className="text-lg">🚗</motion.span>
+                  style={{ display: 'inline-block', scaleX: -1, filter: ['hue-rotate(40deg) saturate(2) brightness(1.1)','grayscale(1) brightness(1.8)','hue-rotate(20deg) saturate(2)','hue-rotate(200deg) saturate(1.5) brightness(1.3)','hue-rotate(120deg) saturate(1.5)'][index] ?? 'hue-rotate(120deg) saturate(1.5)' }} className="text-2xl">🏎️</motion.span>
               </motion.div>
               {bateuMeta && <div className="absolute right-2 top-1 text-sm">🏁</div>}
             </div>
@@ -98,7 +104,8 @@ function LojaCard({ loja, dados, index }) {
   const lcs    = dados.lancamentos || []
   const meta   = dados.metaLoja
   const st     = aggregateLancamentos(lcs)
-  const pv = meta?.meta_total > 0 ? (st.vendas / meta.meta_total) * 100 : 0
+  const mRef = getMeta(meta)
+  const pv = mRef > 0 ? (st.vendas / mRef) * 100 : 0
   const score = Math.round(pv * 10) / 10
   const atingiu = score >= 100
 
@@ -138,7 +145,7 @@ function LojaCard({ loja, dados, index }) {
 
       <div className="space-y-3">
         <MetricBar label="Venda"
-          pct={pv} value={fmtR(st.vendas)} metaVal={fmtR(meta?.meta_total || 0)} color={c.fill} />
+          pct={pv} value={fmtR(st.vendas)} metaVal={fmtR(getMeta(meta))} color={c.fill} />
       </div>
 
       <div className="grid grid-cols-3 gap-1.5 mt-3 pt-3 border-t border-white/10">
@@ -240,8 +247,9 @@ export default function SupervisorPage() {
         const porLoja = {}
         for (const lojaId of lojaIds) {
           const { data: lcs } = await supabase.from('lancamentos').select('vendas').eq('loja_id', lojaId).in('data', keys)
-          const { data: ml }  = await supabase.from('metas_loja').select('meta_total').eq('loja_id', lojaId).eq('ano', ano).eq('mes', mes).maybeSingle()
-          porLoja[lojaId] = { vendas: (lcs || []).reduce((s, l) => s + (l.vendas || 0), 0), meta: ml?.meta_total || 0 }
+          const { data: ml }  = await supabase.from('metas_loja').select('meta_total,meta_loja').eq('loja_id', lojaId).eq('ano', ano).eq('mes', mes).maybeSingle()
+          const metaAnual = (ml?.meta_loja ?? 0) > 0 ? ml.meta_loja : (ml?.meta_total || 0)
+          porLoja[lojaId] = { vendas: (lcs || []).reduce((s, l) => s + (l.vendas || 0), 0), meta: metaAnual }
         }
         const totalVendas = Object.values(porLoja).reduce((s, d) => s + d.vendas, 0)
         const totalMeta   = Object.values(porLoja).reduce((s, d) => s + d.meta, 0)
@@ -270,7 +278,7 @@ export default function SupervisorPage() {
   lojas.forEach(loja => {
     const d = lojaData[loja.id] || { lancamentos: [], metaLoja: null }
     const tv = d.lancamentos.reduce((s, l) => s + (l.vendas || 0), 0)
-    const meta = d.metaLoja?.meta_total || 0
+    const meta = getMeta(d.metaLoja)
     const rawScore = meta > 0 ? Math.round((tv / meta) * 1000) / 10 : 0
     scoresLojas[loja.id] = { scoreDisplay: rawScore, score: applyWeekPos(rawScore, weekNumberLojas) }
   })
@@ -292,7 +300,7 @@ export default function SupervisorPage() {
     const d = lojaData[l.id] || { lancamentos: [] }
     return s + d.lancamentos.reduce((ss, lc) => ss + (lc.vendas || 0), 0)
   }, 0)
-  const metaTotal = lojas.reduce((s, l) => s + (lojaData[l.id]?.metaLoja?.meta_total || 0), 0)
+  const metaTotal = lojas.reduce((s, l) => s + getMeta(lojaData[l.id]?.metaLoja), 0)
   const atingimento = metaTotal > 0 ? (totalVendas / metaTotal) * 100 : 0
   const vendasHoje = lojas.reduce((s, l) => {
     const d = lojaData[l.id] || { lancamentos: [] }
@@ -306,7 +314,8 @@ export default function SupervisorPage() {
   const rankingInsights = lojas.map(l => {
     const d = lojaData[l.id] || { lancamentos: [], metaLoja: null }
     const tv = d.lancamentos.reduce((s, lc) => s + (lc.vendas || 0), 0)
-    const pct = d.metaLoja?.meta_total > 0 ? Math.round(tv / d.metaLoja.meta_total * 1000) / 10 : 0
+    const mRef2 = getMeta(d.metaLoja)
+    const pct = mRef2 > 0 ? Math.round(tv / mRef2 * 1000) / 10 : 0
     return { id: l.id, nome: l.nome, percentual: pct, totalVendas: tv }
   }).sort((a, b) => b.percentual - a.percentual)
 
@@ -352,7 +361,7 @@ export default function SupervisorPage() {
               const rankLojas = [...lojas].map(loja => {
                 const d = lojaData[loja.id] || { lancamentos: [], metaLoja: null }
                 const tv = d.lancamentos.reduce((s, l) => s + (l.vendas || 0), 0)
-                const score = d.metaLoja?.meta_total > 0 ? Math.round(tv / d.metaLoja.meta_total * 1000) / 10 : 0
+                const score = getMeta(d.metaLoja) > 0 ? Math.round(tv / getMeta(d.metaLoja) * 1000) / 10 : 0
                 return { id: loja.id, nome: loja.nome, percentual: score }
               }).sort((a, b) => b.percentual - a.percentual)
 
@@ -396,7 +405,7 @@ export default function SupervisorPage() {
                   <div className="flex items-center justify-between mb-4">
                     <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">{lojas.find(l => l.id === selLoja)?.nome} — Pista do Mês</p>
                     <span className="text-xs text-gray-400">
-                      Meta: {dadosLojaSel.metaLoja ? fmtR(dadosLojaSel.metaLoja.meta_total) : '—'}
+                      Meta: {dadosLojaSel.metaLoja ? fmtR(getMeta(dadosLojaSel.metaLoja)) : '—'}
                     </span>
                   </div>
                   <RaceTrack vendedores={dadosLojaSel.vendedores} scores={dadosLojaSel.scores} semanas={4} />
@@ -454,7 +463,7 @@ export default function SupervisorPage() {
             const d   = lojaData[loja.id] || { lancamentos: [], metaLoja: null }
             const lcs = (d.lancamentos || []).filter(l => keysAtivos.includes(l.data))
             const st  = aggregateLancamentos(lcs)
-            const metaDia = ((d.metaLoja?.meta_total || 0) / 26) * keysAtivos.length
+            const metaDia = (getMeta(d.metaLoja) / 26) * keysAtivos.length
             const score = metaDia > 0 ? Math.round(st.vendas / metaDia * 1000) / 10 : 0
             scoresLojasDia[loja.id] = { scoreDisplay: score, score, vendas: st.vendas }
           })

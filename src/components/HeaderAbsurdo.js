@@ -92,6 +92,10 @@ export default function HeaderAbsurdo({
   labelVend      = 'Vendedores',
   tvHref         = '/dono/tv',
   tabs           = TABS,
+  // Props opcionais para cards duplos (gerente)
+  atingimentoLoja = null,
+  atingimentoVend = null,
+  metaTotalVend   = null,   // meta dos vendedores (quando diferente de metaTotal)
 }) {
   const insights = gerarInsights({ ranking, vendasHoje, vendasOntem, metaTotal })
 
@@ -132,7 +136,20 @@ export default function HeaderAbsurdo({
 
         <motion.div whileHover={{ scale: 1.02 }} className="p-4 rounded-xl bg-white/5 border border-white/10">
           <p className="text-xs text-gray-400">{labelMeta}</p>
-          <p className="text-xl font-bold text-white">{fmtR(metaTotal)}</p>
+          {metaTotalVend !== null ? (
+            <div className="mt-1 space-y-1">
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs text-gray-400">🏬 Loja:</span>
+                <span className="text-base font-bold text-white leading-none">{fmtR(metaTotal)}</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs text-gray-400">🧑‍💼 Vend.:</span>
+                <span className="text-base font-bold text-white leading-none">{fmtR(metaTotalVend)}</span>
+              </div>
+            </div>
+          ) : (
+            <p className="text-xl font-bold text-white">{fmtR(metaTotal)}</p>
+          )}
           <p className="text-xs text-gray-500">no mês</p>
         </motion.div>
 
@@ -146,11 +163,30 @@ export default function HeaderAbsurdo({
           }`}
         >
           <p className="text-xs text-gray-400">Atingimento</p>
-          <p className={`text-2xl font-extrabold ${
-            atingimento >= 70 ? 'text-green-400' : atingimento >= 40 ? 'text-yellow-400' : 'text-red-400'
-          }`}>
-            {fmtPct(atingimento)}
-          </p>
+          {atingimentoLoja !== null && atingimentoVend !== null ? (
+            <div className="mt-1 space-y-1">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-xs text-gray-400">🏬</span>
+                <span className={`text-lg font-extrabold leading-none ${
+                  atingimentoLoja >= 70 ? 'text-green-400' : atingimentoLoja >= 40 ? 'text-yellow-400' : 'text-red-400'
+                }`}>{fmtPct(atingimentoLoja)}</span>
+                <span className="text-xs text-gray-500">(meta da loja)</span>
+              </div>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-xs text-gray-400">🧑‍💼</span>
+                <span className={`text-lg font-extrabold leading-none ${
+                  atingimentoVend >= 70 ? 'text-green-400' : atingimentoVend >= 40 ? 'text-yellow-400' : 'text-red-400'
+                }`}>{fmtPct(atingimentoVend)}</span>
+                <span className="text-xs text-gray-500">(meta da equipe)</span>
+              </div>
+            </div>
+          ) : (
+            <p className={`text-2xl font-extrabold ${
+              atingimento >= 70 ? 'text-green-400' : atingimento >= 40 ? 'text-yellow-400' : 'text-red-400'
+            }`}>
+              {fmtPct(atingimento)}
+            </p>
+          )}
           <p className="text-xs text-gray-500">{labelAting}</p>
         </motion.div>
 

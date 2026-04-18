@@ -27,9 +27,10 @@ export default function SupervisorTVPage() {
 
     for (const loja of lojas) {
       const { data: lcs } = await supabase.from('lancamentos').select('vendas').eq('loja_id', loja.id).in('data', monthKeys)
-      const { data: ml }  = await supabase.from('metas_loja').select('meta_total').eq('loja_id', loja.id).eq('ano', ano).eq('mes', mes + 1).maybeSingle()
+      const { data: ml }  = await supabase.from('metas_loja').select('meta_total,meta_loja').eq('loja_id', loja.id).eq('ano', ano).eq('mes', mes + 1).maybeSingle()
+      const metaRef     = (ml?.meta_loja ?? 0) > 0 ? ml.meta_loja : (ml?.meta_total ?? 0)
       const totalVendas = (lcs || []).reduce((s, l) => s + (l.vendas || 0), 0)
-      const percentual  = ml?.meta_total > 0 ? Math.round(totalVendas / ml.meta_total * 1000) / 10 : 0
+      const percentual  = metaRef > 0 ? Math.round(totalVendas / metaRef * 1000) / 10 : 0
       novoRanking.push({ id: loja.id, nome: loja.nome, codigo: loja.codigo, percentual })
     }
 
@@ -113,7 +114,7 @@ export default function SupervisorTVPage() {
                 <motion.div animate={{ left: `${Math.min(pct, 97)}%` }} transition={{ type: 'spring', stiffness: 100, damping: 14 }}
                   className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2">
                   <motion.span animate={{ scaleX: [-1,-1], rotate: [0,8,-6,4,0], y: [0,-1,1,-1,0] }} transition={{ duration: 0.6, repeat: Infinity }}
-                    style={{ display: 'inline-block', scaleX: -1, fontSize: 28 }}>🚗</motion.span>
+                    style={{ display: 'inline-block', scaleX: -1, fontSize: 32, filter: ['hue-rotate(40deg) saturate(2) brightness(1.1)','grayscale(1) brightness(1.8)','hue-rotate(20deg) saturate(2)','hue-rotate(200deg) saturate(1.5) brightness(1.3)','hue-rotate(120deg) saturate(1.5)'][index] ?? 'hue-rotate(120deg) saturate(1.5)' }}>🏎️</motion.span>
                 </motion.div>
                 {bateuMeta && <div className="absolute right-3 top-1/2 -translate-y-1/2 text-2xl">🏁</div>}
               </div>

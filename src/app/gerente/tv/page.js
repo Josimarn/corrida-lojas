@@ -357,7 +357,7 @@ export default function GerenteTVPage() {
                 <span
                   className="hidden absolute top-1/2 z-20 text-4xl"
                   style={{ left: `calc(${score}% - 24px)`, transform: 'translateY(-50%) scaleX(-1)' }}
-                >🚗</span>
+                >🏎️</span>
 
                 {bateuMeta && <div className="absolute right-4 top-1/2 -translate-y-1/2 text-2xl z-30">🏁</div>}
               </div>

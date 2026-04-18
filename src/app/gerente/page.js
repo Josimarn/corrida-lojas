@@ -1,9 +1,33 @@
 'use client'
 import { useState, useEffect, useCallback, useRef } from 'react'
 
-function CurrencyInput({ value, onChange, placeholder, ...props }) {
+function parseCurrency(str) {
+  // Aceita tanto vírgula quanto ponto como separador decimal
+  // Ex: "1.498,35" → 1498.35 | "1498.35" → 1498.35 | "1498,35" → 1498.35
+  let s = String(str || '').trim()
+  const lastDot   = s.lastIndexOf('.')
+  const lastComma = s.lastIndexOf(',')
+  if (lastDot !== -1 && lastComma !== -1) {
+    if (lastDot > lastComma) {
+      // "1,498.35" — ponto é decimal, vírgula é milhar
+      s = s.replace(/,/g, '')
+    } else {
+      // "1.498,35" — vírgula é decimal, ponto é milhar
+      s = s.replace(/\./g, '').replace(',', '.')
+    }
+  } else if (lastComma !== -1) {
+    // só vírgula → decimal
+    s = s.replace(',', '.')
+  }
+  // mantém apenas dígitos e um ponto decimal
+  s = s.replace(/[^\d.]/g, '')
+  const parts = s.split('.')
+  return parts.length > 1 ? parts[0] + '.' + parts[1].slice(0, 2) : parts[0]
+}
+
+function CurrencyInput({ value, onChange, placeholder, className, ...props }) {
   const [focused, setFocused] = useState(false)
-  const num = parseFloat(String(value || '').replace(',', '.'))
+  const num = parseFloat(parseCurrency(value))
   const display = !focused && value !== '' && value !== undefined && !isNaN(num)
     ? num.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
     : (value || '')
@@ -12,15 +36,17 @@ function CurrencyInput({ value, onChange, placeholder, ...props }) {
       {...props}
       type="text"
       inputMode="decimal"
+      className={className}
       value={display}
       placeholder={placeholder || 'R$ 0,00'}
       onFocus={e => { setFocused(true); setTimeout(() => e.target.select(), 0) }}
-      onBlur={() => setFocused(false)}
-      onChange={e => {
-        const raw = e.target.value.replace(/[^\d,]/g, '').replace(',', '.')
-        const parts = raw.split('.')
-        onChange(parts.length > 1 ? parts[0] + '.' + parts.slice(1).join('') : parts[0])
+      onBlur={e => {
+        setFocused(false)
+        // Normaliza ao sair do campo
+        const parsed = parseCurrency(e.target.value)
+        if (parsed !== value) onChange(parsed)
       }}
+      onChange={e => onChange(parseCurrency(e.target.value))}
     />
   )
 }
@@ -75,6 +101,7 @@ export default function GerentePage() {
   const [selVendedor, setSelVendedor] = useState(null)
 
   // Form metas
+  const [fMetaLojaEsp, setFMetaLojaEsp] = useState('')
   const [fMetaTotal,   setFMetaTotal]   = useState('')
   const [fPesoVenda,   setFPesoVenda]   = useState('40')
   const [fPesoTicket,  setFPesoTicket]  = useState('30')
@@ -190,13 +217,16 @@ export default function GerentePage() {
       for (let mes = 1; mes <= 12; mes++) {
         const keys = getMonthDateKeys(ano, mes - 1)
         const { data: lcs } = await supabase.from('lancamentos').select('vendas,vendedor_id').eq('loja_id', lojaId).in('data', keys)
-        const { data: ml }  = await supabase.from('metas_loja').select('meta_total').eq('loja_id', lojaId).eq('ano', ano).eq('mes', mes).maybeSingle()
+        const { data: ml, error: mlErr } = await supabase.from('metas_loja').select('meta_total,meta_loja').eq('loja_id', lojaId).eq('ano', ano).eq('mes', mes).maybeSingle()
+        // Se meta_loja ainda não existe na tabela, busca só meta_total
+        const metaTotal = mlErr ? (await supabase.from('metas_loja').select('meta_total').eq('loja_id', lojaId).eq('ano', ano).eq('mes', mes).maybeSingle()).data?.meta_total || 0 : (ml?.meta_total || 0)
+        const metaLoja  = ml?.meta_loja ?? 0
         const totalVendas = (lcs || []).reduce((s, l) => s + (l.vendas || 0), 0)
         const porVendedor = {}
         vs.forEach(v => {
           porVendedor[v.id] = { vendas: (lcs || []).filter(l => l.vendedor_id === v.id).reduce((s, l) => s + (l.vendas || 0), 0) }
         })
-        resultado[ano][mes] = { vendas: totalVendas, meta: ml?.meta_total || 0, porVendedor }
+        resultado[ano][mes] = { vendas: totalVendas, meta: metaTotal, metaLoja, porVendedor }
       }
     }
     setDadosAnual(resultado)
@@ -258,6 +288,7 @@ export default function GerentePage() {
   }
 
   function abrirModalMetas() {
+    setFMetaLojaEsp(metaLoja?.meta_loja || '')
     setFMetaTotal(metaLoja?.meta_total || '')
     setFPesoVenda(String(metaLoja?.peso_venda || 40))
     setFPesoTicket(String(metaLoja?.peso_ticket || 30))
@@ -290,7 +321,8 @@ export default function GerentePage() {
     // Salva meta da loja
     await supabase.from('metas_loja').upsert({
       loja_id: loja.id, ano: vY, mes: vM + 1,
-      meta_total: parseFloat(fMetaTotal) || 0,
+      meta_loja:  parseFloat(fMetaLojaEsp) || 0,
+      meta_total: parseFloat(fMetaTotal)   || 0,
       peso_venda: pesoV, peso_ticket: pesoT, peso_pa: pesoP,
     }, { onConflict: 'loja_id,ano,mes' })
 
@@ -499,8 +531,11 @@ export default function GerentePage() {
   const totalVendas  = lancamentos.reduce((s, l) => s + (l.vendas || 0), 0)
   const vendasHoje   = lancamentos.filter(l => l.data === todayKey2).reduce((s, l) => s + (l.vendas || 0), 0)
   const vendasOntem  = lancamentos.filter(l => l.data === ontemKey).reduce((s, l) => s + (l.vendas || 0), 0)
-  const metaTotal    = metaLoja?.meta_total || 0
-  const atingimento  = metaTotal > 0 ? (totalVendas / metaTotal) * 100 : 0
+  const metaTotal        = metaLoja?.meta_total || 0
+  const metaLojaEsp      = metaLoja?.meta_loja  || 0
+  const atingimento      = metaTotal    > 0 ? (totalVendas / metaTotal)   * 100 : 0
+  const atingimentoLoja  = metaLojaEsp  > 0 ? (totalVendas / metaLojaEsp) * 100 : 0
+  const atingimentoVend  = metaTotal    > 0 ? (totalVendas / metaTotal)   * 100 : 0
 
   const TABS_GERENTE = [
     { key: 'mes',    label: '📅 Mês',    activeClass: 'bg-white text-black' },
@@ -516,6 +551,14 @@ export default function GerentePage() {
   }
 
   const rankingInsights = rankingAtual.map(r => ({ ...r, totalVendas: scores[r.id]?.stats?.vendas || 0 }))
+
+  // Análise de metas (modal)
+  const mAnalLoja    = parseFloat(fMetaLojaEsp) || 0
+  const mAnalEquipe  = parseFloat(fMetaTotal)   || 0
+  const mAnalDiff    = mAnalEquipe - mAnalLoja
+  const mAnalMax     = Math.max(mAnalLoja, mAnalEquipe, 1)
+  const mAnalPctLoja   = Math.min((mAnalLoja   / mAnalMax) * 100, 100)
+  const mAnalPctEquipe = Math.min((mAnalEquipe / mAnalMax) * 100, 100)
 
   return (
     <motion.div
@@ -534,8 +577,11 @@ export default function GerentePage() {
           perfil="Gerente"
           perfilCor="bg-indigo-500/20 text-indigo-300"
           totalVendas={totalVendas}
-          metaTotal={metaTotal}
+          metaTotal={metaLojaEsp > 0 ? metaLojaEsp : metaTotal}
+          metaTotalVend={metaTotal}
           atingimento={atingimento}
+          atingimentoLoja={atingimentoLoja}
+          atingimentoVend={atingimentoVend}
           vendedores={vendedores.length}
           ranking={rankingInsights}
           mesLabel={`${MESES[vM]} ${vY}`}
@@ -723,45 +769,44 @@ export default function GerentePage() {
                 <p className="section-title">
                   {podeLancar ? 'Lançar vendas' : 'Consolidado'} — {tituloLancar}
                 </p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-                  {vendedores.map((v, i) => {
-                    const cur  = lancamentos.find(l => l.vendedor_id === v.id && l.data === keysAtivos[0])
-                    const lcsV = lancamentos.filter(l => l.vendedor_id === v.id && keysAtivos.includes(l.data))
-                    const stV  = aggregateLancamentos(lcsV)
-                    return (
-                      <div key={v.id} className="card p-4">
-                        <div className="flex items-center gap-2.5 mb-3">
-                          <Avatar nome={v.nome} fotoUrl={v.foto_url} index={i} size={34} />
-                          <p className="font-semibold text-sm text-stone-900 truncate">{v.nome}</p>
+                {(() => {
+                  const pesos = {
+                    peso_venda:  metaLoja?.peso_venda  ?? 40,
+                    peso_ticket: metaLoja?.peso_ticket ?? 30,
+                    peso_pa:     metaLoja?.peso_pa     ?? 30,
+                  }
+                  const ranked = vendedores
+                    .map(v => {
+                      const cur  = lancamentos.find(l => l.vendedor_id === v.id && l.data === keysAtivos[0])
+                      const lcsV = lancamentos.filter(l => l.vendedor_id === v.id && keysAtivos.includes(l.data))
+                      const st   = aggregateLancamentos(lcsV)
+                      const meta = getVendedorMeta(v.id)
+                      const calc = calcScore(st, meta, pesos)
+                      return { v, st, meta, calc, cur, pesos }
+                    })
+                    .sort((a, b) => b.calc.score - a.calc.score)
+
+                  return (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                      {ranked.map(({ v, st, meta, calc, cur, pesos: p }, r) => (
+                        <div key={v.id} className="flex flex-col gap-2">
+                          <ScoreCard
+                            vendedor={{ ...v, meta }}
+                            stats={st}
+                            scored={{ ...calc, scoreDisplay: calc.score, pesos: p }}
+                            index={r}
+                          />
+                          {podeLancar && (
+                            <button onClick={() => { setSelVendedor(v); setFVendas(cur?.vendas||''); setFAtend(cur?.atendimentos||''); setFPecas(cur?.pecas||''); setModalLancar(true) }}
+                              className="w-full px-3 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-gray-300 text-xs font-medium transition-all border border-white/10">
+                              + Lançar vendas
+                            </button>
+                          )}
                         </div>
-                        {stV.vendas > 0 ? (
-                          <div className="space-y-1.5 mb-3">
-                            <div className="flex justify-between text-xs">
-                              <span className="text-stone-400">Vendas</span>
-                              <span className="font-bold text-stone-800">{fmtR(stV.vendas)}</span>
-                            </div>
-                            <div className="flex justify-between text-xs">
-                              <span className="text-stone-400">Atendimentos</span>
-                              <span className="font-bold text-stone-800">{stV.atendimentos}</span>
-                            </div>
-                            <div className="flex justify-between text-xs">
-                              <span className="text-stone-400">Peças</span>
-                              <span className="font-bold text-stone-800">{stV.pecas}</span>
-                            </div>
-                          </div>
-                        ) : (
-                          <p className="text-xs text-stone-400 mb-3">Nenhum lançamento ainda</p>
-                        )}
-                        {podeLancar && (
-                          <button onClick={() => { setSelVendedor(v); setFVendas(cur?.vendas||''); setFAtend(cur?.atendimentos||''); setFPecas(cur?.pecas||''); setModalLancar(true) }}
-                            className="btn-success w-full text-xs">
-                            + Lançar
-                          </button>
-                        )}
-                      </div>
-                    )
-                  })}
-                </div>
+                      ))}
+                    </div>
+                  )
+                })()}
               </>
             )
           })()}
@@ -872,92 +917,196 @@ export default function GerentePage() {
                   </button>
                 ))}
               </div>
-              <div className="card p-4">
-                <p className="section-title mb-4">Vendas por Mês — {anossel.join(' vs ')}</p>
-                <div className="space-y-4">
+              {/* ── PAINEL 1: VENDAS POR MÊS ── */}
+              <div className="bg-[#0b1220] border border-white/10 rounded-2xl p-5">
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-5">
+                  📅 Vendas por Mês — {anossel.join(' vs ')}
+                </p>
+                <div className="space-y-5">
                   {MESES.map((nomeMes, mi) => {
-                    const mes = mi + 1
-                    const isCur = anossel.includes(TODAY.getFullYear()) && mi === TODAY.getMonth()
+                    const mes    = mi + 1
+                    const isCur  = anossel.includes(TODAY.getFullYear()) && mi === TODAY.getMonth()
                     const allFut = anossel.every(a => a === TODAY.getFullYear() && mi > TODAY.getMonth())
                     return (
-                      <div key={mes} className={allFut ? 'opacity-30' : ''}>
-                        <div className="flex items-center justify-between text-xs mb-1.5">
-                          <span className={`font-medium w-20 ${isCur ? 'text-blue-600 font-bold' : 'text-stone-600'}`}>{nomeMes}{isCur && ' ●'}</span>
-                          <div className="flex gap-3">
+                      <div key={mes} className={`transition-opacity ${allFut ? 'opacity-25' : ''}`}>
+                        {/* Linha de cabeçalho do mês */}
+                        <div className="flex items-center justify-between mb-2">
+                          <span className={`text-sm font-semibold w-24 ${isCur ? 'text-blue-300' : 'text-gray-300'}`}>
+                            {nomeMes}{isCur && <span className="ml-1 text-blue-400 text-xs">●</span>}
+                          </span>
+                          <div className="flex flex-wrap gap-4">
                             {anossel.map((ano) => {
-                              const d = dadosAnual[ano]?.[mes] || { vendas: 0, meta: 0 }
-                              const pct = d.meta > 0 ? Math.min(d.vendas / d.meta * 100, 100) : 0
-                              return <span key={ano} className="text-xs font-bold" style={{ color: coresAnos[anosDisponiveis.indexOf(ano)] }}>
-                                {ano}: {fmtR(d.vendas)}{d.meta > 0 && <> / Meta: {fmtR(d.meta)} <span className="opacity-80">({fmtPct(pct)})</span></>}
-                              </span>
+                              const d       = dadosAnual[ano]?.[mes] || { vendas: 0, meta: 0, metaLoja: 0 }
+                              const pctEq   = d.meta     > 0 ? (d.vendas / d.meta)     * 100 : 0
+                              const pctLj   = d.metaLoja > 0 ? (d.vendas / d.metaLoja) * 100 : null
+                              const refPct  = pctLj ?? pctEq
+                              const perfCor = refPct >= 70 ? 'text-green-400' : refPct >= 40 ? 'text-yellow-400' : refPct > 0 ? 'text-red-400' : 'text-gray-500'
+                              const anoCor  = coresAnos[anosDisponiveis.indexOf(ano)]
+                              return (
+                                <div key={ano} className="flex items-center gap-3 text-xs">
+                                  <span className="font-bold" style={{ color: anoCor }}>{ano}</span>
+                                  <span className="text-white font-semibold">{fmtR(d.vendas)}</span>
+                                  {pctLj !== null && (
+                                    <span className={`font-bold ${perfCor}`}>
+                                      🏬 {fmtPct(pctLj)}
+                                    </span>
+                                  )}
+                                  {d.meta > 0 && (
+                                    <span className={`font-bold ${pctLj === null ? perfCor : pctEq >= 70 ? 'text-green-400' : pctEq >= 40 ? 'text-yellow-400' : 'text-red-400'}`}>
+                                      🧑‍💼 {fmtPct(pctEq)}
+                                    </span>
+                                  )}
+                                  {pctLj !== null && d.meta > 0 && (
+                                    <span className={`${pctEq - pctLj > 0 ? 'text-yellow-300' : 'text-gray-500'} text-[10px]`}>
+                                      {pctEq - pctLj > 0 ? `+${fmtPct(pctEq - pctLj)}` : fmtPct(pctEq - pctLj)} dif.
+                                    </span>
+                                  )}
+                                </div>
+                              )
                             })}
                           </div>
                         </div>
-                        <div className="space-y-1">
+
+                        {/* Barras por ano */}
+                        <div className="space-y-1.5">
                           {anossel.map((ano) => {
-                            const d = dadosAnual[ano]?.[mes] || { vendas: 0, meta: 0 }
-                            const pct = d.meta > 0 ? Math.min(d.vendas / d.meta * 100, 100) : 0
-                            return <div key={ano} className="h-2.5 bg-stone-100 rounded-full overflow-hidden">
-                              <div className="h-full rounded-full transition-all duration-700"
-                                style={{ width: `${pct}%`, background: coresAnos[anosDisponiveis.indexOf(ano)] }} />
-                            </div>
+                            const d      = dadosAnual[ano]?.[mes] || { vendas: 0, meta: 0, metaLoja: 0 }
+                            const maxRef = Math.max(d.meta, d.metaLoja, d.vendas, 1)
+                            const wV     = Math.min((d.vendas   / maxRef) * 100, 100)
+                            const wEq    = d.meta     > 0 ? Math.min((d.meta     / maxRef) * 100, 100) : 0
+                            const wLj    = d.metaLoja > 0 ? Math.min((d.metaLoja / maxRef) * 100, 100) : 0
+                            const anoCor = coresAnos[anosDisponiveis.indexOf(ano)]
+                            return (
+                              <div key={ano} className="relative h-3 bg-white/5 rounded-full overflow-visible">
+                                {/* Barra de vendas */}
+                                <div className="absolute inset-y-0 left-0 rounded-full transition-all duration-700"
+                                  style={{ width: `${wV}%`, background: anoCor, opacity: 0.85 }} />
+                                {/* Marcador meta equipe */}
+                                {wEq > 0 && (
+                                  <div className="absolute top-0 h-full w-0.5 bg-indigo-400/70"
+                                    style={{ left: `${wEq}%` }} title={`Meta Equipe: ${fmtR(d.meta)}`} />
+                                )}
+                                {/* Marcador meta loja */}
+                                {wLj > 0 && (
+                                  <div className="absolute top-0 h-full w-0.5 bg-blue-400/70"
+                                    style={{ left: `${wLj}%` }} title={`Meta Loja: ${fmtR(d.metaLoja)}`} />
+                                )}
+                              </div>
+                            )
                           })}
+                          {/* Legenda dos marcadores (só no primeiro mês ou quando há dados) */}
+                          {mi === 0 && (
+                            <div className="flex gap-4 text-[10px] text-gray-500 mt-1">
+                              <span className="flex items-center gap-1"><span className="inline-block w-2 h-2 rounded-full bg-blue-400/70" /> Meta Loja</span>
+                              <span className="flex items-center gap-1"><span className="inline-block w-2 h-2 rounded-full bg-indigo-400/70" /> Meta Equipe</span>
+                            </div>
+                          )}
                         </div>
                       </div>
                     )
                   })}
                 </div>
               </div>
-              <div className="card p-4">
-                <p className="section-title mb-4">Atingimento por Vendedor e Mês</p>
-                {anossel.map((ano) => {
-                  const cor = coresAnos[anosDisponiveis.indexOf(ano)]
-                  const totalAno = vendedores.reduce((s, v) => s + Object.values(dadosAnual[ano] || {}).reduce((ss, m) => ss + (m.porVendedor?.[v.id]?.vendas || 0), 0), 0)
-                  return (
-                    <div key={ano} className="mb-5 last:mb-0">
-                      <div className="flex items-center gap-2 mb-2">
-                        <div className="w-3 h-3 rounded-full" style={{ background: cor }} />
-                        <p className="text-sm font-bold" style={{ color: cor }}>{ano} — Total: {fmtR(totalAno)}</p>
+
+              {/* ── PAINEL 2: ATINGIMENTO POR VENDEDOR ── */}
+              {anossel.map((ano) => {
+                const anoCor  = coresAnos[anosDisponiveis.indexOf(ano)]
+                const totalAno = vendedores.reduce((s, v) =>
+                  s + Object.values(dadosAnual[ano] || {}).reduce((ss, m) => ss + (m.porVendedor?.[v.id]?.vendas || 0), 0), 0)
+
+                // totais por vendedor para calcular média
+                const totaisVend = vendedores.map(v => ({
+                  ...v,
+                  total: Object.values(dadosAnual[ano] || {}).reduce((s, m) => s + (m.porVendedor?.[v.id]?.vendas || 0), 0)
+                }))
+                const mediaVend = totaisVend.length > 0
+                  ? totaisVend.reduce((s, v) => s + v.total, 0) / totaisVend.length
+                  : 0
+                const maxVend = Math.max(...totaisVend.map(v => v.total), 1)
+
+                return (
+                  <div key={ano} className="bg-[#0b1220] border border-white/10 rounded-2xl p-5">
+                    <div className="flex items-center justify-between mb-5">
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 rounded-full" style={{ background: anoCor }} />
+                        <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">
+                          🧑‍💼 Atingimento por Vendedor — {ano}
+                        </p>
                       </div>
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-xs">
-                          <thead>
-                            <tr className="text-left text-stone-400 border-b border-stone-100">
-                              <th className="pb-1.5 pr-4 font-medium">Vendedor</th>
-                              {MESES.map((m, i) => <th key={i} className="pb-1.5 text-center px-1 font-medium">{m.slice(0,3)}</th>)}
-                              <th className="pb-1.5 text-right pl-2 font-medium">Total</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {vendedores.map((v, vi) => {
-                              const c = getCor(vi)
-                              const totalV = Object.values(dadosAnual[ano] || {}).reduce((s, m) => s + (m.porVendedor?.[v.id]?.vendas || 0), 0)
-                              return (
-                                <tr key={v.id} className="border-b border-stone-50 last:border-0">
-                                  <td className="py-1.5 pr-4 font-semibold truncate max-w-[80px]" style={{ color: c.border }}>{v.nome.split(' ')[0]}</td>
-                                  {MESES.map((_, mi) => {
-                                    const mes = mi + 1
-                                    const vv  = dadosAnual[ano]?.[mes]?.porVendedor?.[v.id]?.vendas || 0
-                                    const mm  = getVendedorMeta(v.id)
-                                    const p   = mm.meta_venda > 0 ? vv / mm.meta_venda * 100 : 0
-                                    const fut = ano === TODAY.getFullYear() && mi > TODAY.getMonth()
-                                    return <td key={mi} className={`py-1.5 text-center px-1 ${fut ? 'text-stone-200' : ''}`}>
-                                      {vv > 0
-                                        ? <span className={`font-bold ${p >= 100 ? 'text-green-600' : p >= 80 ? 'text-amber-600' : 'text-stone-600'}`}>{fmtPct(p)}</span>
-                                        : <span className="text-stone-300">—</span>}
-                                    </td>
-                                  })}
-                                  <td className="py-1.5 text-right pl-2 font-bold text-stone-800">{fmtR(totalV)}</td>
-                                </tr>
-                              )
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
+                      <span className="text-sm font-bold text-white">{fmtR(totalAno)}</span>
                     </div>
-                  )
-                })}
-              </div>
+
+                    <div className="space-y-3">
+                      {totaisVend
+                        .sort((a, b) => b.total - a.total)
+                        .map((v, vi) => {
+                          const mm      = getVendedorMeta(v.id)
+                          const pct     = mm.meta_venda > 0 ? (v.total / mm.meta_venda) * 100 : 0
+                          const wBar    = Math.min((v.total / maxVend) * 100, 100)
+                          const acimaMd = v.total >= mediaVend
+                          const perfCor = pct >= 100 ? '#34d399' : pct >= 70 ? '#facc15' : pct >= 40 ? '#f59e0b' : '#f87171'
+                          const CORES   = ['#2979FF','#FF3D6B','#00E096','#f59e0b','#818cf8']
+                          const barCor  = CORES[vi % CORES.length]
+
+                          return (
+                            <div key={v.id} className="bg-white/[0.03] border border-white/10 rounded-xl p-3">
+                              <div className="flex items-center justify-between mb-2">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs text-gray-500 w-4">{vi + 1}</span>
+                                  <span className="text-sm font-semibold text-white">{v.nome}</span>
+                                  <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
+                                    acimaMd ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'
+                                  }`}>
+                                    {acimaMd ? '▲ acima da média' : '▼ abaixo da média'}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-3 text-xs">
+                                  <span className="text-gray-400">{fmtR(v.total)}</span>
+                                  <span className="font-bold" style={{ color: perfCor }}>{pct > 0 ? fmtPct(pct) : '—'}</span>
+                                </div>
+                              </div>
+
+                              {/* Barra de progresso */}
+                              <div className="relative h-2 bg-white/5 rounded-full overflow-hidden">
+                                <div className="h-full rounded-full transition-all duration-700"
+                                  style={{ width: `${wBar}%`, background: barCor }} />
+                                {/* Marcador de média */}
+                                {maxVend > 0 && (
+                                  <div className="absolute top-0 h-full w-px bg-white/30"
+                                    style={{ left: `${Math.min((mediaVend / maxVend) * 100, 100)}%` }} />
+                                )}
+                              </div>
+
+                              {/* Breakdown por mês — linha de sparkline compacta */}
+                              <div className="flex gap-1 mt-2">
+                                {MESES.map((_, mi) => {
+                                  const mes  = mi + 1
+                                  const vv   = dadosAnual[ano]?.[mes]?.porVendedor?.[v.id]?.vendas || 0
+                                  const fut  = ano === TODAY.getFullYear() && mi > TODAY.getMonth()
+                                  const maxM = Math.max(...MESES.map((_, i) => dadosAnual[ano]?.[i+1]?.porVendedor?.[v.id]?.vendas || 0), 1)
+                                  const h    = vv > 0 ? Math.max(Math.round((vv / maxM) * 20), 4) : 2
+                                  return (
+                                    <div key={mi} className="flex-1 flex flex-col items-center gap-0.5" title={`${MESES[mi]}: ${fmtR(vv)}`}>
+                                      <div className={`w-full rounded-sm transition-all duration-500 ${fut ? 'opacity-20' : ''}`}
+                                        style={{ height: `${h}px`, background: vv > 0 ? barCor : 'rgba(255,255,255,0.08)' }} />
+                                      <span className="text-[8px] text-gray-600">{MESES[mi].slice(0,1)}</span>
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            </div>
+                          )
+                      })}
+                    </div>
+
+                    {/* Linha de média */}
+                    <div className="mt-3 pt-3 border-t border-white/10 flex justify-between text-xs text-gray-500">
+                      <span>Média por vendedor</span>
+                      <span className="font-semibold text-gray-400">{fmtR(mediaVend)}</span>
+                    </div>
+                  </div>
+                )
+              })}
             </>
           )
         })()}
@@ -991,7 +1140,7 @@ export default function GerentePage() {
                       <motion.div animate={{ left: `${Math.min(item.percentual, 98)}%` }} transition={{ type: 'spring', stiffness: 80, damping: 12 }}
                         className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2">
                         <motion.span animate={{ scaleX: [-1,-1], rotate: [0,8,-6,4,0] }} transition={{ duration: 0.6, repeat: Infinity }}
-                          style={{ display: 'inline-block', scaleX: -1 }} className="text-lg">🚗</motion.span>
+                          style={{ display: 'inline-block', scaleX: -1, filter: ['hue-rotate(40deg) saturate(2) brightness(1.1)','grayscale(1) brightness(1.8)','hue-rotate(20deg) saturate(2)','hue-rotate(200deg) saturate(1.5) brightness(1.3)','hue-rotate(120deg) saturate(1.5)'][index] ?? 'hue-rotate(120deg) saturate(1.5)' }} className="text-2xl">🏎️</motion.span>
                       </motion.div>
                       {bateuMeta && <div className="absolute right-2 top-1 text-sm">🏁</div>}
                     </div>
@@ -1199,83 +1348,166 @@ export default function GerentePage() {
 
       {/* Modal: Metas */}
       {modalMetas && (
-        <div className="fixed inset-0 bg-black/50 flex items-start justify-center z-50 p-4 overflow-y-auto">
-          <div className="bg-white rounded-xl w-full max-w-lg p-5 shadow-xl my-8">
-            <h2 className="text-lg font-bold mb-1">⚙ Metas — {MESES[vM]} {vY}</h2>
-            <p className="text-xs text-stone-400 mb-4">{loja?.nome}</p>
+          <div className="fixed inset-0 bg-black/70 flex items-start justify-center z-50 p-4 overflow-y-auto">
+            <div className="bg-[#0f1724] border border-white/10 rounded-2xl w-full max-w-lg shadow-2xl my-8">
 
-            {/* Meta da loja */}
-            <div className="bg-stone-50 rounded-lg p-4 mb-4">
-              <p className="text-xs font-bold text-stone-500 uppercase tracking-widest mb-3">Meta da Loja</p>
-              <div className="mb-3">
-                <label className="label-field">Meta Total do Mês (R$)</label>
-                <CurrencyInput value={fMetaTotal} onChange={setFMetaTotal} placeholder="Ex: 183.750,00" />
+              {/* HEADER */}
+              <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-white/10">
+                <div>
+                  <h2 className="text-lg font-bold text-white">⚙️ Definição de Metas</h2>
+                  <p className="text-xs text-gray-400 mt-0.5">{loja?.nome} · {MESES[vM]} {vY}</p>
+                </div>
+                <button onClick={() => setModalMetas(false)} className="text-gray-500 hover:text-white transition-colors text-xl leading-none">✕</button>
               </div>
-              <div className="grid grid-cols-3 gap-2">
-                <div>
-                  <label className="label-field">Peso Venda (%)</label>
-                  <input type="number" value={fPesoVenda} onChange={e => setFPesoVenda(e.target.value)} min="0" max="100" />
-                </div>
-                <div>
-                  <label className="label-field">Peso Ticket (%)</label>
-                  <input type="number" value={fPesoTicket} onChange={e => setFPesoTicket(e.target.value)} min="0" max="100" />
-                </div>
-                <div>
-                  <label className="label-field">Peso PA (%)</label>
-                  <input type="number" value={fPesoPA} onChange={e => setFPesoPA(e.target.value)} min="0" max="100" />
-                </div>
-              </div>
-              {(parseInt(fPesoVenda)||0) + (parseInt(fPesoTicket)||0) + (parseInt(fPesoPA)||0) !== 100 && (
-                <p className="text-xs text-amber-600 mt-2">⚠ Os pesos devem somar 100%. Atual: {(parseInt(fPesoVenda)||0) + (parseInt(fPesoTicket)||0) + (parseInt(fPesoPA)||0)}%</p>
-              )}
-            </div>
 
-            {/* Metas por vendedor */}
-            <div className="mb-4">
-              <p className="text-xs font-bold text-stone-500 uppercase tracking-widest mb-3">Metas por Vendedor</p>
-              <div className="space-y-3">
-                {vendedores.map(v => (
-                  <div key={v.id} className="bg-stone-50 rounded-lg p-3">
-                    <p className="text-sm font-semibold text-stone-800 mb-2">{v.nome}</p>
-                    <div className="grid grid-cols-3 gap-2">
-                      <div>
-                        <label className="label-field">Venda (R$)</label>
-                        <CurrencyInput placeholder="0,00"
-                          value={fMetasVend[v.id]?.venda || ''}
-                          onChange={val => setFMetasVend(p => ({ ...p, [v.id]: { ...p[v.id], venda: val } }))} />
+              <div className="px-6 py-5 space-y-4">
+
+                {/* BLOCO 1 — META DA LOJA */}
+                <div className="bg-blue-500/5 border border-blue-400/20 rounded-xl p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="text-base">🏬</span>
+                    <p className="text-xs font-bold text-blue-300 uppercase tracking-widest">Meta da Loja</p>
+                  </div>
+                  <CurrencyInput value={fMetaLojaEsp} onChange={setFMetaLojaEsp} placeholder="Ex: 175.000,00"
+                    className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white placeholder-gray-500 text-sm focus:outline-none focus:border-blue-400/50" />
+                  <p className="text-xs text-gray-500 mt-2">Objetivo real da loja no mês</p>
+                </div>
+
+                {/* BLOCO 2 — META DA EQUIPE */}
+                <div className="bg-indigo-500/5 border border-indigo-400/20 rounded-xl p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="text-base">🧑‍💼</span>
+                    <p className="text-xs font-bold text-indigo-300 uppercase tracking-widest">Meta da Equipe</p>
+                  </div>
+                  <CurrencyInput value={fMetaTotal} onChange={setFMetaTotal} placeholder="Ex: 183.750,00"
+                    className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white placeholder-gray-500 text-sm focus:outline-none focus:border-indigo-400/50" />
+                  <p className="text-xs text-gray-500 mt-2">Soma das metas dos vendedores · A meta da equipe pode ser maior que a da loja (estratégia comercial)</p>
+                </div>
+
+                {/* BLOCO ANÁLISE — só exibe quando ao menos um valor > 0 */}
+                {(mAnalLoja > 0 || mAnalEquipe > 0) && (
+                  <div className="bg-white/[0.03] border border-white/10 rounded-xl p-4 space-y-3">
+                    <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">📊 Análise de Metas</p>
+
+                    {/* Barra comparativa */}
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-gray-400 w-14 shrink-0">🏬 Loja</span>
+                        <div className="flex-1 h-2 bg-white/10 rounded-full overflow-hidden">
+                          <div className="h-full bg-blue-400 rounded-full transition-all duration-500"
+                            style={{ width: `${mAnalPctLoja}%` }} />
+                        </div>
+                        <span className="text-xs text-blue-300 w-28 text-right shrink-0">
+                          {mAnalLoja > 0 ? mAnalLoja.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '—'}
+                        </span>
                       </div>
-                      <div>
-                        <label className="label-field">Ticket Médio (R$)</label>
-                        <CurrencyInput placeholder="0,00"
-                          value={fMetasVend[v.id]?.ticket || ''}
-                          onChange={val => setFMetasVend(p => ({ ...p, [v.id]: { ...p[v.id], ticket: val } }))} />
-                      </div>
-                      <div>
-                        <label className="label-field">PA (peças)</label>
-                        <input type="number" placeholder="0" min="0" step="0.1"
-                          value={fMetasVend[v.id]?.pa || ''}
-                          onChange={e => setFMetasVend(p => ({ ...p, [v.id]: { ...p[v.id], pa: e.target.value } }))} />
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-gray-400 w-14 shrink-0">🧑‍💼 Equipe</span>
+                        <div className="flex-1 h-2 bg-white/10 rounded-full overflow-hidden">
+                          <div className="h-full bg-indigo-400 rounded-full transition-all duration-500"
+                            style={{ width: `${mAnalPctEquipe}%` }} />
+                        </div>
+                        <span className="text-xs text-indigo-300 w-28 text-right shrink-0">
+                          {mAnalEquipe > 0 ? mAnalEquipe.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '—'}
+                        </span>
                       </div>
                     </div>
+
+                    {/* Mensagem de diferença */}
+                    {mAnalLoja > 0 && mAnalEquipe > 0 && (
+                      <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium ${
+                        mAnalDiff > 0  ? 'bg-yellow-500/10 border border-yellow-400/20 text-yellow-300'
+                        : mAnalDiff < 0 ? 'bg-red-500/10 border border-red-400/20 text-red-300'
+                        : 'bg-green-500/10 border border-green-400/20 text-green-300'
+                      }`}>
+                        {mAnalDiff > 0 && <>📈 Equipe acima da meta da loja em +{mAnalDiff.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</>}
+                        {mAnalDiff < 0 && <>📉 Equipe abaixo da meta da loja em {mAnalDiff.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</>}
+                        {mAnalDiff === 0 && <>✅ Equipe alinhada com a meta da loja</>}
+                      </div>
+                    )}
                   </div>
-                ))}
-              </div>
-            </div>
+                )}
 
-            {msgM && (
-              <div className={`text-sm px-3 py-2 rounded-lg mb-3 ${msgM.includes('sucesso') ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
-                {msgM}
-              </div>
-            )}
+                {/* PESOS */}
+                <div className="bg-white/3 border border-white/10 rounded-xl p-4">
+                  <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">⚖️ Pesos do Score</p>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div>
+                      <label className="block text-xs text-gray-400 mb-1">Venda (%)</label>
+                      <input type="number" value={fPesoVenda} onChange={e => setFPesoVenda(e.target.value)} min="0" max="100"
+                        className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-white/30" />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-gray-400 mb-1">Ticket (%)</label>
+                      <input type="number" value={fPesoTicket} onChange={e => setFPesoTicket(e.target.value)} min="0" max="100"
+                        className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-white/30" />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-gray-400 mb-1">PA (%)</label>
+                      <input type="number" value={fPesoPA} onChange={e => setFPesoPA(e.target.value)} min="0" max="100"
+                        className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-white/30" />
+                    </div>
+                  </div>
+                  {(parseInt(fPesoVenda)||0) + (parseInt(fPesoTicket)||0) + (parseInt(fPesoPA)||0) !== 100 && (
+                    <p className="text-xs text-amber-400 mt-2">⚠️ Os pesos devem somar 100%. Atual: {(parseInt(fPesoVenda)||0) + (parseInt(fPesoTicket)||0) + (parseInt(fPesoPA)||0)}%</p>
+                  )}
+                </div>
 
-            <div className="flex gap-2">
-              <button onClick={() => setModalMetas(false)} className="btn-secondary flex-1">Fechar</button>
-              <button onClick={salvarMetas} disabled={savingM} className="btn-warning flex-1">
-                {savingM ? 'Salvando...' : 'Salvar Metas'}
-              </button>
+                {/* METAS POR VENDEDOR */}
+                <div>
+                  <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">👥 Metas por Vendedor</p>
+                  <div className="space-y-2">
+                    {vendedores.map(v => (
+                      <div key={v.id} className="bg-white/3 border border-white/10 rounded-xl p-3">
+                        <p className="text-sm font-semibold text-white mb-2">{v.nome}</p>
+                        <div className="grid grid-cols-3 gap-2">
+                          <div>
+                            <label className="block text-xs text-gray-400 mb-1">Venda (R$)</label>
+                            <CurrencyInput placeholder="0,00"
+                              value={fMetasVend[v.id]?.venda || ''}
+                              onChange={val => setFMetasVend(p => ({ ...p, [v.id]: { ...p[v.id], venda: val } }))}
+                              className="w-full bg-white/5 border border-white/10 rounded-lg px-2 py-1.5 text-white placeholder-gray-600 text-sm focus:outline-none focus:border-white/30" />
+                          </div>
+                          <div>
+                            <label className="block text-xs text-gray-400 mb-1">Ticket (R$)</label>
+                            <CurrencyInput placeholder="0,00"
+                              value={fMetasVend[v.id]?.ticket || ''}
+                              onChange={val => setFMetasVend(p => ({ ...p, [v.id]: { ...p[v.id], ticket: val } }))}
+                              className="w-full bg-white/5 border border-white/10 rounded-lg px-2 py-1.5 text-white placeholder-gray-600 text-sm focus:outline-none focus:border-white/30" />
+                          </div>
+                          <div>
+                            <label className="block text-xs text-gray-400 mb-1">PA (peças)</label>
+                            <input type="number" placeholder="0" min="0" step="0.1"
+                              value={fMetasVend[v.id]?.pa || ''}
+                              onChange={e => setFMetasVend(p => ({ ...p, [v.id]: { ...p[v.id], pa: e.target.value } }))}
+                              className="w-full bg-white/5 border border-white/10 rounded-lg px-2 py-1.5 text-white placeholder-gray-600 text-sm focus:outline-none focus:border-white/30" />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {msgM && (
+                  <div className={`text-sm px-3 py-2 rounded-lg ${msgM.includes('sucesso') ? 'bg-green-500/10 border border-green-400/20 text-green-300' : 'bg-red-500/10 border border-red-400/20 text-red-300'}`}>
+                    {msgM}
+                  </div>
+                )}
+
+                <div className="flex gap-2 pt-1">
+                  <button onClick={() => setModalMetas(false)}
+                    className="flex-1 px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/15 text-gray-300 text-sm font-medium transition-all">
+                    Fechar
+                  </button>
+                  <button onClick={salvarMetas} disabled={savingM}
+                    className="flex-1 px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-black text-sm font-bold transition-all">
+                    {savingM ? 'Salvando...' : '💾 Salvar Metas'}
+                  </button>
+                </div>
+
+              </div>
             </div>
           </div>
-        </div>
       )}
 
       {/* 💥 Efeito de ultrapassagem */}
